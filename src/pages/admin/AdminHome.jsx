@@ -1,84 +1,69 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../utils/supabase'
-import AdminLayout from '../../components/AdminLayout'
+import { useState } from "react";
+import { useApp } from "../../context/AppContext";
+import ManageProducts from "./ManageProducts";
+import ManageEvents   from "./ManageEvents";
+import CheckInDesk    from "./CheckInDesk";
+import CreateEvent    from "./CreateEvent";
+import EventDetails   from "./EventDetails";
 
-export default function AdminHome() {
-  const [stats, setStats] = useState({ events: 0, registrations: 0, users: 0 })
-  const navigate = useNavigate()
+const TABS = [
+  { id: "products", label: "📦 Products",     icon: "📦" },
+  { id: "add",      label: "➕ Add Product",  icon: "➕" },
+  { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
+  { id: "users",    label: "👥 Users",         icon: "👥" },
+  { id: "checkin",  label: "🔍 Check-In",     icon: "🔍" },
+];
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      const [{ count: evCount }, { count: regCount }, { count: userCount }] = await Promise.all([
-        supabase.from('events').select('*', { count: 'exact', head: true }),
-        supabase.from('registrations').select('*', { count: 'exact', head: true }),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
-      ])
-      setStats({ events: evCount || 0, registrations: regCount || 0, users: userCount || 0 })
-    }
-    fetchStats()
-  }, [])
+export default function AdminHome({ setPage }) {
+  const { user, logout } = useApp();
+  const [tab, setTab] = useState("products");
 
-  const cards = [
-    { label: 'Total Events', value: stats.events, icon: '📅', color: '#dcfce7', accent: '#16a34a' },
-    { label: 'Registrations', value: stats.registrations, icon: '🎫', color: '#dbeafe', accent: '#2563eb' },
-    { label: 'Users', value: stats.users, icon: '👥', color: '#fef9c3', accent: '#d97706' },
-  ]
+  if (!user || user.role !== "admin") return (
+    <div style={{ textAlign: "center", padding: "80px 24px" }}>
+      <div style={{ fontSize: 56, marginBottom: 16 }}>🔒</div>
+      <h2 style={{ fontFamily: "'Playfair Display', serif", color: "#be185d" }}>Admin Access Required</h2>
+      <button onClick={() => setPage("login")} style={{ background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 20, color: "#fff", fontWeight: 700, padding: "10px 28px", cursor: "pointer", marginTop: 16 }}>
+        LOGIN AS ADMIN
+      </button>
+    </div>
+  );
 
   return (
-    <AdminLayout>
-      <div style={styles.page}>
-        <div style={styles.header}>
-          <h1 style={styles.title}>Dashboard</h1>
-          <p style={styles.sub}>Overview of your EventHub portal</p>
+    <div style={{ minHeight: "100vh", background: "#fff5f7" }}>
+      {/* Admin header */}
+      <header style={{ background: "linear-gradient(135deg,#1a1a1a,#2d1d2e)", padding: "0 24px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 900, color: "#fff", letterSpacing: 2 }}>FITCHEQUE</span>
+          <span style={{ background: "#be185d", color: "#fff", fontSize: 9, fontWeight: 800, padding: "3px 10px", borderRadius: 20, letterSpacing: 1 }}>ADMIN</span>
         </div>
-        <div style={styles.statsGrid}>
-          {cards.map(c => (
-            <div key={c.label} style={{ ...styles.statCard, background: c.color }}>
-              <span style={styles.statIcon}>{c.icon}</span>
-              <p style={{ ...styles.statValue, color: c.accent }}>{c.value}</p>
-              <p style={styles.statLabel}>{c.label}</p>
-            </div>
-          ))}
+        <div style={{ display: "flex", gap: 12 }}>
+          <button onClick={() => setPage("home")} style={{ background: "none", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, color: "rgba(255,255,255,0.7)", fontSize: 12, padding: "6px 14px", cursor: "pointer", fontWeight: 600 }}>
+            View Store
+          </button>
+          <button onClick={() => { logout(); setPage("login"); }} style={{ background: "#be185d", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, padding: "6px 14px", cursor: "pointer", fontWeight: 700 }}>
+            Logout
+          </button>
         </div>
-        <div style={styles.quickActions}>
-          <h2 style={styles.sectionTitle}>Quick Actions</h2>
-          <div style={styles.actionRow}>
-            <button style={styles.actionBtn} onClick={() => navigate('/manage-events/create')}>
-              + Create Event
-            </button>
-            <button style={{ ...styles.actionBtn, ...styles.actionBtnOutline }}
-              onClick={() => navigate('/manage-events')}>
-              Manage Events
-            </button>
-          </div>
-        </div>
-      </div>
-    </AdminLayout>
-  )
-}
+      </header>
 
-const styles = {
-  page: { padding: '2rem' },
-  header: { marginBottom: '2rem' },
-  title: { fontSize: '1.75rem', fontWeight: 800 },
-  sub: { color: 'var(--gray-500)', fontSize: '0.9rem', marginTop: '4px' },
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2rem' },
-  statCard: { borderRadius: '12px', padding: '1.25rem', textAlign: 'center' },
-  statIcon: { fontSize: '1.75rem', display: 'block', marginBottom: '0.5rem' },
-  statValue: { fontSize: '2rem', fontWeight: 800, lineHeight: 1 },
-  statLabel: { fontSize: '0.8rem', color: 'var(--gray-600)', marginTop: '4px', fontWeight: 500 },
-  quickActions: { background: 'var(--white)', borderRadius: '12px', padding: '1.5rem', border: '1px solid var(--gray-200)' },
-  sectionTitle: { fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' },
-  actionRow: { display: 'flex', gap: '12px', flexWrap: 'wrap' },
-  actionBtn: {
-    padding: '10px 20px', background: 'var(--green-dark)',
-    color: 'var(--white)', border: 'none', borderRadius: '8px',
-    fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer',
-  },
-  actionBtnOutline: {
-    background: 'var(--white)',
-    border: '1px solid var(--green-dark)',
-    color: 'var(--green-dark)',
-  },
+      {/* Tab nav */}
+      <div style={{ background: "#fff", borderBottom: "2px solid #fce7f3", padding: "0 24px", display: "flex", gap: 0, overflowX: "auto" }}>
+        {TABS.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: "14px 18px", fontSize: 12, fontWeight: 700, letterSpacing: 0.8, whiteSpace: "nowrap", color: tab === t.id ? "#be185d" : "#888", borderBottom: tab === t.id ? "3px solid #be185d" : "3px solid transparent", transition: "all .2s" }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div>
+        {tab === "products" && <ManageProducts setPage={setPage} />}
+        {tab === "add"      && <CreateEvent    setPage={setPage} />}
+        {tab === "orders"   && <ManageEvents   setPage={setPage} />}
+        {tab === "users"    && <EventDetails   setPage={setPage} />}
+        {tab === "checkin"  && <CheckInDesk    setPage={setPage} />}
+      </div>
+    </div>
+  );
 }

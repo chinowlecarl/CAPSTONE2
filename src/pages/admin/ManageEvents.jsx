@@ -1,175 +1,152 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../utils/supabase'
-import AdminLayout from '../../components/AdminLayout'
+import { useState, useEffect } from "react";
+import { apiFetch } from "../../utils/api";
+import { useApp } from "../../context/AppContext";
 
-export default function ManageEvents() {
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const navigate = useNavigate()
+const STATUS_COLORS = {
+  pending:   { bg: "#fffbeb", color: "#f59e0b", border: "#fde68a" },
+  confirmed: { bg: "#eff6ff", color: "#3b82f6", border: "#bfdbfe" },
+  shipped:   { bg: "#f0fdf4", color: "#22c55e", border: "#bbf7d0" },
+  delivered: { bg: "#f5f3ff", color: "#8b5cf6", border: "#ddd6fe" },
+  cancelled: { bg: "#fff5f7", color: "#be185d", border: "#fce7f3" },
+};
 
-  useEffect(() => { fetchEvents() }, [])
+export default function ManageEvents({ setPage }) {
+  const { user } = useApp();
+  const [orders, setOrders]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter]   = useState("all");
+  const [search, setSearch]   = useState("");
+  const [msg, setMsg]         = useState(null);
 
-  const fetchEvents = async () => {
-    const { data } = await supabase.from('events').select('*').order('date', { ascending: false })
-    setEvents(data || [])
-    setLoading(false)
-  }
+  const showMsg = (text, type = "success") => {
+    setMsg({ text, type });
+    setTimeout(() => setMsg(null), 3000);
+  };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this event?')) return
-    await supabase.from('events').delete().eq('id', id)
-    setEvents(events.filter(e => e.id !== id))
-  }
+  useEffect(() => {
+    if (!user || user.role !== "admin") return;
+    apiFetch("/admin/orders")
+      .then((data) => { setOrders(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
 
-  const formatDate = (d) => {
-    const date = new Date(d)
-    return { month: date.toLocaleString('en', { month: 'short' }).toUpperCase(), day: date.getDate() }
-  }
+  const updateStatus = async (orderId, status) => {
+    try {
+      await apiFetch(`/admin/orders/${orderId}`, {
+        method: "PUT",
+        body: JSON.stringify({ status }),
+      });
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status } : o))
+      );
+      showMsg("Order status updated!");
+    } catch (err) {
+      showMsg(err.message, "error");
+    }
+  };
 
-  const formatTime = (t) => {
-    if (!t) return ''
-    const [h, m] = t.split(':')
-    const hour = parseInt(h)
-    return `${hour % 12 || 12}:${m} ${hour >= 12 ? 'PM' : 'AM'}`
-  }
+  const filtered = orders.filter((o) => {
+    const matchFilter = filter === "all" || o.status === filter;
+    const matchSearch =
+      !search ||
+      o.id.toLowerCase().includes(search.toLowerCase()) ||
+      (o.users?.fullname || "").toLowerCase().includes(search.toLowerCase());
+    return matchFilter && matchSearch;
+  });
+
+  const counts = ["pending","confirmed","shipped","delivered","cancelled"].reduce((acc, s) => {
+    acc[s] = orders.filter((o) => o.status === s).length;
+    return acc;
+  }, {});
+
+  if (!user || user.role !== "admin") return null;
 
   return (
-    <AdminLayout>
-      <div style={styles.page}>
-        <div style={styles.header}>
-          <div>
-            <h1 style={styles.title}>Events Management</h1>
-            <p style={styles.sub}>Create, update, and monitor campus activities.</p>
-          </div>
-          <button style={styles.createBtn} onClick={() => navigate('/manage-events/create')}>
-            + Create Event
-          </button>
-        </div>
+    <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 900, color: "#1a1a1a", margin: "0 0 4px" }}>Manage Orders</h1>
+        <p style={{ color: "#aaa", fontSize: 13 }}>Track and update order fulfilment status</p>
+      </div>
 
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 24 }}>
+        {Object.entries(counts).map(([status, count]) => {
+          const c = STATUS_COLORS[status];
+          return (
+            <button key={status} onClick={() => setFilter(filter === status ? "all" : status)}
+              style={{ background: filter === status ? c.bg : "#fff", border: `1.5px solid ${filter === status ? c.border : "#fce7f3"}`, borderRadius: 12, padding: "14px 10px", cursor: "pointer", textAlign: "center" }}>
+              <div style={{ fontSize: 20, fontWeight: 900, color: c.color }}>{count}</div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginTop: 2 }}>{status}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {msg && (
+        <div style={{ borderRadius: 10, padding: "12px 16px", marginBottom: 20, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, background: msg.type === "success" ? "#f0fdf4" : "#fff5f7", borderLeft: `4px solid ${msg.type === "success" ? "#22c55e" : "#be185d"}`, color: msg.type === "success" ? "#16a34a" : "#be185d" }}>
+          {msg.type === "success" ? "✓" : "✗"} {msg.text}
+        </div>
+      )}
+
+      <div style={{ position: "relative", marginBottom: 20, maxWidth: 360 }}>
+        <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#db2777" }}>🔍</span>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by order ID or customer..."
+          style={{ width: "100%", paddingLeft: 36, paddingRight: 16, paddingTop: 10, paddingBottom: 10, border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 13, outline: "none", background: "#fff5f7", boxSizing: "border-box" }} />
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #fce7f3", overflow: "hidden", boxShadow: "0 2px 16px rgba(190,24,93,0.06)" }}>
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}><Spinner /></div>
-        ) : events.length === 0 ? (
-          <div style={styles.empty}>
-            <p>No events yet.</p>
-            <button style={styles.createBtn} onClick={() => navigate('/manage-events/create')}>Create your first event</button>
+          <div style={{ textAlign: "center", padding: 60 }}>
+            <div style={{ width: 36, height: 36, border: "4px solid #fce7f3", borderTopColor: "#be185d", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto" }} />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "60px 24px", color: "#ccc" }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>📦</div>
+            <p style={{ fontWeight: 600 }}>No orders found</p>
           </div>
         ) : (
-          <div style={styles.grid}>
-            {events.map(event => {
-              const { month, day } = formatDate(event.date)
-              return (
-                <div key={event.id} style={styles.card}>
-                  <div style={styles.cardTop}>
-                    <div style={styles.dateBox}>
-                      <span style={styles.month}>{month}</span>
-                      <span style={styles.day}>{day}</span>
-                    </div>
-                    <div style={styles.cardInfo}>
-                      <h3 style={styles.eventTitle}>{event.title}</h3>
-                      <span style={{ ...styles.statusBadge, ...(event.status === 'published' ? styles.published : styles.draft) }}>
-                        {event.status}
-                      </span>
-                    </div>
-                  </div>
-
-                  <p style={styles.desc}>
-                    {event.description?.length > 130
-                      ? event.description.slice(0, 130) + '...'
-                      : event.description}
-                  </p>
-
-                  <div style={styles.metaBox}>
-                    <span style={styles.metaItem}>🕐 {formatTime(event.time)}</span>
-                    <span style={styles.metaItem}>📍 {event.location}</span>
-                  </div>
-
-                  <div style={styles.actions}>
-                    <button style={styles.btnEdit}
-                      onClick={() => navigate(`/manage-events/edit/${event.id}`)}>
-                      ✏️ Edit
-                    </button>
-                    <button style={styles.btnDelete} onClick={() => handleDelete(event.id)}>
-                      🗑 Delete
-                    </button>
-                    <button style={styles.btnDetails}
-                      onClick={() => navigate(`/manage-events/${event.id}`)}>
-                      📄 Details
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: "linear-gradient(135deg, #fce7f3, #fbcfe8)" }}>
+                  {["Order ID", "Customer", "Items", "Total", "Date", "Status", "Update"].map((h) => (
+                    <th key={h} style={{ padding: "12px 14px", textAlign: "left", fontSize: 10, fontWeight: 800, color: "#be185d", letterSpacing: 1.2, textTransform: "uppercase", borderBottom: "1.5px solid #fce7f3" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((order, i) => {
+                  const c = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
+                  return (
+                    <tr key={order.id} style={{ borderBottom: "1px solid #fce7f3", background: i % 2 === 0 ? "#fff" : "#fff8fb" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#fff5f7")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#fff8fb")}>
+                      <td style={{ padding: "12px 14px", fontFamily: "monospace", fontSize: 11, color: "#666" }}>#{order.id.slice(0,8).toUpperCase()}</td>
+                      <td style={{ padding: "12px 14px" }}>
+                        <div style={{ fontWeight: 700, color: "#1a1a1a" }}>{order.users?.fullname || "Guest"}</div>
+                        <div style={{ fontSize: 11, color: "#bbb" }}>{order.users?.email || ""}</div>
+                      </td>
+                      <td style={{ padding: "12px 14px", color: "#555" }}>{order.order_items?.length || 0} item{order.order_items?.length !== 1 ? "s" : ""}</td>
+                      <td style={{ padding: "12px 14px", fontWeight: 800, color: "#be185d" }}>₱{Number(order.total_amount).toFixed(2)}</td>
+                      <td style={{ padding: "12px 14px", color: "#888", fontSize: 12 }}>{new Date(order.created_at).toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"})}</td>
+                      <td style={{ padding: "12px 14px" }}>
+                        <span style={{ padding: "4px 12px", borderRadius: 20, fontSize: 10, fontWeight: 800, letterSpacing: 0.8, textTransform: "uppercase", background: c.bg, color: c.color, border: `1px solid ${c.border}` }}>{order.status}</span>
+                      </td>
+                      <td style={{ padding: "12px 14px" }}>
+                        <select value={order.status} onChange={(e) => updateStatus(order.id, e.target.value)}
+                          style={{ padding: "6px 10px", border: "1.5px solid #fce7f3", borderRadius: 8, fontSize: 11, fontWeight: 700, background: "#fff5f7", color: "#be185d", cursor: "pointer", outline: "none" }}>
+                          {["pending","confirmed","shipped","delivered","cancelled"].map((s) => (
+                            <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
-    </AdminLayout>
-  )
-}
-
-function Spinner() {
-  return (
-    <div style={{ width: '32px', height: '32px', border: '3px solid var(--gray-200)', borderTopColor: 'var(--green-dark)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
-  )
-}
-
-const styles = {
-  page: { padding: '2rem' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' },
-  title: { fontSize: '1.75rem', fontWeight: 800 },
-  sub: { color: 'var(--gray-500)', fontSize: '0.875rem', marginTop: '4px' },
-  createBtn: {
-    padding: '10px 20px', background: 'var(--green-dark)',
-    color: 'var(--white)', border: 'none', borderRadius: '8px',
-    fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', gap: '6px',
-  },
-  grid: { display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' },
-  card: {
-    background: 'var(--white)', border: '1px solid var(--gray-200)',
-    borderRadius: '12px', padding: '1.25rem',
-  },
-  cardTop: { display: 'flex', gap: '12px', marginBottom: '0.75rem', alignItems: 'flex-start' },
-  dateBox: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    background: 'var(--gray-50)', border: '1px solid var(--gray-200)',
-    borderRadius: '8px', padding: '6px 12px', minWidth: '50px',
-  },
-  month: { fontSize: '0.6rem', fontWeight: 700, color: 'var(--green-dark)', letterSpacing: '0.05em' },
-  day: { fontSize: '1.4rem', fontWeight: 800, lineHeight: 1.1 },
-  cardInfo: { flex: 1 },
-  eventTitle: { fontSize: '0.95rem', fontWeight: 700, marginBottom: '4px' },
-  statusBadge: {
-    fontSize: '0.72rem', fontWeight: 600,
-    padding: '2px 8px', borderRadius: '99px',
-    display: 'inline-block',
-  },
-  published: { background: '#dcfce7', color: '#16a34a' },
-  draft: { background: 'var(--gray-100)', color: 'var(--gray-500)' },
-  desc: { fontSize: '0.83rem', color: 'var(--gray-500)', lineHeight: 1.5, marginBottom: '0.75rem' },
-  metaBox: {
-    background: 'var(--gray-50)', border: '1px solid var(--gray-100)',
-    borderRadius: '8px', padding: '8px 12px',
-    display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '1rem',
-  },
-  metaItem: { fontSize: '0.8rem', color: 'var(--gray-600)' },
-  actions: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
-  btnEdit: {
-    padding: '6px 14px', background: 'var(--white)',
-    border: '1px solid var(--gray-300)', borderRadius: '8px',
-    fontSize: '0.8rem', cursor: 'pointer', fontWeight: 500,
-  },
-  btnDelete: {
-    padding: '6px 14px', background: 'var(--white)',
-    border: '1px solid #fca5a5', color: 'var(--red)',
-    borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 500,
-  },
-  btnDetails: {
-    padding: '6px 14px', background: 'var(--white)',
-    border: '1px solid var(--green-dark)', color: 'var(--green-dark)',
-    borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 500,
-  },
-  empty: { textAlign: 'center', padding: '4rem', color: 'var(--gray-500)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' },
+  );
 }

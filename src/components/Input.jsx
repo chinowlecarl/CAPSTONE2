@@ -1,25 +1,31 @@
-export default function Input({ label, error, style, ...props }) {
+export function Input({ label, type = "text", value, onChange, placeholder, required, min }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', ...style }}>
-      {label && <label style={styles.label}>{label}</label>}
-      <input style={{ ...styles.input, ...(error ? styles.inputError : {}) }} {...props} />
-      {error && <span style={styles.error}>{error}</span>}
+    <div style={{ marginBottom: 16 }}>
+      {label && (
+        <label style={{
+          display: "block", fontSize: 10, fontWeight: 800,
+          color: "#888", letterSpacing: 1.5, marginBottom: 6,
+          textTransform: "uppercase",
+        }}>
+          {label}
+        </label>
+      )}
+      <input
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        required={required}
+        min={min}
+        style={{
+          width: "100%", padding: "10px 14px",
+          border: "1.5px solid #fce7f3", borderRadius: 10,
+          fontSize: 13, outline: "none", background: "#fff5f7",
+          boxSizing: "border-box", transition: "border-color .2s",
+        }}
+        onFocus={(e) => (e.target.style.borderColor = "#db2777")}
+        onBlur={(e) => (e.target.style.borderColor = "#fce7f3")}
+      />
     </div>
-  )
-}
-
-const styles = {
-  label: { fontSize: '0.875rem', fontWeight: 500, color: 'var(--gray-700)' },
-  input: {
-    padding: '10px 12px',
-    border: '1px solid var(--gray-200)',
-    borderRadius: '8px',
-    fontSize: '0.9rem',
-    color: 'var(--gray-900)',
-    background: 'var(--white)',
-    transition: 'border-color 0.2s',
-    width: '100%',
-  },
-  inputError: { borderColor: 'var(--red)' },
-  error: { fontSize: '0.8rem', color: 'var(--red)' },
+  );
 }

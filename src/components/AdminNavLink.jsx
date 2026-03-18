@@ -1,40 +1,21 @@
-import { NavLink } from 'react-router-dom'
-
-export default function AdminNavLink({ to, icon, children, home }) {
-  if (home) {
-    return (
-      <NavLink
-        to="/manage-events"
-        end
-        style={({ isActive }) => ({
-          display: 'flex', alignItems: 'center', gap: '10px',
-          padding: '10px 1.25rem',
-          color: 'var(--white)',
-          background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
-          fontSize: '0.875rem', fontWeight: 500,
-          borderLeft: isActive ? '3px solid var(--gold-light)' : '3px solid transparent',
-          transition: 'all 0.15s',
-        })}
-      >
-        <span>{icon}</span> {children}
-      </NavLink>
-    )
-  }
-
+export function AdminNavLink({ label, active, onClick }) {
   return (
-    <NavLink
-      to={to}
-      style={({ isActive }) => ({
-        display: 'flex', alignItems: 'center', gap: '10px',
-        padding: '10px 1.25rem',
-        color: 'var(--white)',
-        background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
-        fontSize: '0.875rem', fontWeight: 500,
-        borderLeft: isActive ? '3px solid var(--gold-light)' : '3px solid transparent',
-        transition: 'all 0.15s',
-      })}
+    <button
+      onClick={onClick}
+      style={{
+        background: active ? "rgba(190,24,93,0.15)" : "none",
+        border: "none",
+        cursor: "pointer",
+        fontSize: 12,
+        fontWeight: 700,
+        letterSpacing: 1,
+        padding: "8px 14px",
+        borderRadius: 8,
+        color: active ? "#be185d" : "rgba(255,255,255,0.6)",
+        transition: "all .2s",
+      }}
     >
-      <span>{icon}</span> {children}
-    </NavLink>
-  )
+      {label}
+    </button>
+  );
 }

@@ -1,43 +1,56 @@
-export default function Hero({ title, subtitle, date, time, location }) {
+import { fmt, salePrice } from "../utils/api";
+
+export function Hero({ featured, setPage }) {
   return (
-    <div style={styles.hero}>
-      <h1 style={styles.title}>{title}</h1>
-      {subtitle && <p style={styles.subtitle}>{subtitle}</p>}
-      <div style={styles.meta}>
-        {(date || time) && (
-          <div style={styles.metaItem}>
-            <span style={styles.icon}>📅</span>
-            <span>{date}</span>
-            {time && <><span style={{ margin: '0 4px' }}>•</span><span style={{ ...styles.icon, background: '#d97706' }}>⏰</span><span>{time}</span></>}
+    <section style={{
+      background: "linear-gradient(135deg, #fff0f6 0%, #fce7f3 50%, #fbcfe8 100%)",
+      padding: "40px 24px 32px",
+    }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        {featured.length > 0 ? (
+          <div style={{
+            display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 4, borderRadius: 12, overflow: "hidden", height: 280,
+          }}>
+            {featured.slice(0, 4).map((p) => (
+              <div key={p.id} style={{ position: "relative", overflow: "hidden" }}>
+                <img
+                  src={p.image_url}
+                  alt={p.title}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  onError={(e) =>
+                    (e.target.src = "https://via.placeholder.com/300x280/fce7f3/be185d?text=FITCHEQUE")
+                  }
+                />
+                <div style={{
+                  position: "absolute", bottom: 0, left: 0, right: 0,
+                  background: "linear-gradient(0deg, rgba(190,24,93,0.7) 0%, transparent 100%)",
+                  padding: "20px 12px 12px",
+                }}>
+                  <p style={{ color: "#fff", fontSize: 11, fontWeight: 700, margin: 0 }}>{p.title}</p>
+                  <p style={{ color: "#fce7f3", fontSize: 12, fontWeight: 800, margin: "2px 0 0" }}>
+                    {fmt(salePrice(p.price, p.discount))}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
-        )}
-        {location && (
-          <div style={styles.metaItem}>
-            <span style={{ ...styles.icon, background: '#d97706' }}>📍</span>
-            <span>{location}</span>
+        ) : (
+          <div style={{
+            height: 280,
+            background: "linear-gradient(135deg, #fce7f3, #f9a8d4)",
+            borderRadius: 12,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <div style={{
+              fontFamily: "'Playfair Display', serif", fontSize: 48,
+              fontWeight: 900, color: "#be185d", letterSpacing: 4,
+            }}>
+              FITCHEQUE
+            </div>
           </div>
         )}
       </div>
-    </div>
-  )
-}
-
-const styles = {
-  hero: {
-    background: 'var(--green-dark)',
-    borderRadius: '16px',
-    padding: '3rem',
-    color: 'var(--white)',
-    marginBottom: '2rem',
-  },
-  title: { fontSize: '2.5rem', fontWeight: 800, lineHeight: 1.15, marginBottom: '0.75rem' },
-  subtitle: { fontSize: '1rem', opacity: 0.85, marginBottom: '1.5rem', maxWidth: '600px' },
-  meta: { display: 'flex', gap: '2rem', flexWrap: 'wrap' },
-  metaItem: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem' },
-  icon: {
-    background: 'var(--green-mid)',
-    padding: '4px 6px',
-    borderRadius: '6px',
-    fontSize: '0.75rem',
-  },
+    </section>
+  );
 }

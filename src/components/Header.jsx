@@ -1,95 +1,111 @@
-import { useState, useRef, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { supabase } from '../utils/supabase'
-import { useProfile } from '../hooks/useProfile'
+import { useState } from "react";
+import { useApp } from "../context/AppContext";
+import { HeaderNavLink } from "./HeaderNavLink";
 
-export default function Header() {
-  const { profile } = useProfile()
-  const [open, setOpen] = useState(false)
-  const navigate = useNavigate()
-  const ref = useRef()
+export function Header({ page, setPage }) {
+  const { user, cart } = useApp();
+  const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
+  const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    navigate('/signin')
-  }
-
-  const initials = profile?.full_name
-    ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : 'AC'
+  const links = [
+    { label: "NEW ARRIVALS", to: "products" },
+    { label: "HOME", to: "home" },
+    { label: "PRODUCT", to: "products" },
+    { label: "CART", to: "cart" },
+    { label: "ABOUT", to: "about" },
+  ];
 
   return (
-    <header style={styles.header}>
-      <Link to="/events" style={styles.brand}>
-        <span style={styles.brandMain}>EventHub</span>
-        <span style={styles.brandSub}>FEU ROOSEVELT</span>
-      </Link>
-      <nav style={styles.nav}>
-        <Link to="/events" style={styles.navLink}>Events</Link>
-        {profile?.role === 'admin' && (
-          <Link to="/manage-events" style={styles.navLink}>Admin</Link>
-        )}
-        <div style={{ position: 'relative' }} ref={ref}>
-          <button style={styles.avatar} onClick={() => setOpen(!open)}>
-            {initials}
-          </button>
-          {open && (
-            <div style={styles.dropdown}>
-              <div style={styles.dropItem}>Profile <span style={styles.badge}>New</span></div>
-              <div style={styles.dropItem}>Settings</div>
-              <div style={{ ...styles.dropItem, ...styles.dropLogout }} onClick={handleLogout}>Logout</div>
-            </div>
-          )}
-        </div>
-      </nav>
-    </header>
-  )
-}
+    <nav style={{
+      background: "#fff",
+      borderBottom: "2px solid #fce7f3",
+      position: "sticky", top: 0, zIndex: 100,
+      boxShadow: "0 2px 12px rgba(190,24,93,0.08)",
+    }}>
+      <div style={{
+        maxWidth: 1200, margin: "0 auto", padding: "0 24px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        height: 60,
+      }}>
+        <button
+          onClick={() => setPage("home")}
+          style={{
+            fontFamily: "'Playfair Display', serif", fontSize: 22,
+            fontWeight: 900, color: "#1a1a1a", letterSpacing: 2,
+            background: "none", border: "none", cursor: "pointer",
+          }}
+        >
+          FITCHEQUE
+        </button>
 
-const styles = {
-  header: {
-    background: 'var(--white)',
-    borderBottom: '1px solid var(--gray-200)',
-    padding: '0 2rem',
-    height: '60px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    position: 'sticky',
-    top: 0,
-    zIndex: 100,
-  },
-  brand: { display: 'flex', flexDirection: 'column', lineHeight: 1.1 },
-  brandMain: { fontSize: '1.2rem', fontWeight: 700, color: 'var(--gray-900)' },
-  brandSub: { fontSize: '0.6rem', fontWeight: 600, color: 'var(--gray-500)', letterSpacing: '0.05em' },
-  nav: { display: 'flex', alignItems: 'center', gap: '1.5rem' },
-  navLink: { fontSize: '0.9rem', fontWeight: 500, color: 'var(--gray-700)', transition: 'color 0.2s' },
-  avatar: {
-    width: '36px', height: '36px', borderRadius: '50%',
-    background: 'var(--green-dark)', color: 'var(--white)',
-    fontWeight: 700, fontSize: '0.8rem', border: 'none',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  dropdown: {
-    position: 'absolute', right: 0, top: '44px',
-    background: 'var(--white)', border: '1px solid var(--gray-200)',
-    borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-    minWidth: '160px', overflow: 'hidden', zIndex: 200,
-  },
-  dropItem: {
-    padding: '10px 16px', fontSize: '0.875rem', cursor: 'pointer',
-    color: 'var(--gray-700)', display: 'flex', alignItems: 'center',
-    justifyContent: 'space-between', transition: 'background 0.15s',
-  },
-  badge: {
-    background: '#dcfce7', color: '#16a34a',
-    fontSize: '0.65rem', padding: '2px 6px', borderRadius: '99px', fontWeight: 600,
-  },
-  dropLogout: { color: 'var(--gray-500)' },
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {links.map((l) => (
+            <HeaderNavLink
+              key={l.label}
+              label={l.label}
+              active={page === l.to}
+              onClick={() => setPage(l.to)}
+            />
+          ))}
+
+          {user ? (
+            <>
+              {user.role === "admin" && (
+                <HeaderNavLink
+                  label="ADMIN"
+                  active={page === "admin"}
+                  onClick={() => setPage("admin")}
+                />
+              )}
+              <button
+                onClick={() => setPage("profile")}
+                style={{ background: "none", border: "none", cursor: "pointer", marginLeft: 8 }}
+              >
+                <div style={{
+                  width: 36, height: 36, borderRadius: "50%",
+                  background: "linear-gradient(135deg, #f9a8d4, #be185d)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#fff", fontWeight: 800, fontSize: 14,
+                  border: "2px solid #fce7f3",
+                }}>
+                  {user.fullname?.charAt(0).toUpperCase()}
+                </div>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setPage("login")}
+              style={{
+                marginLeft: 8,
+                background: "linear-gradient(135deg, #f9a8d4, #be185d)",
+                border: "none", borderRadius: 20, color: "#fff",
+                fontWeight: 700, fontSize: 11, letterSpacing: 1,
+                padding: "8px 18px", cursor: "pointer",
+              }}
+            >
+              LOGIN
+            </button>
+          )}
+
+          <button
+            onClick={() => setPage("cart")}
+            style={{ position: "relative", background: "none", border: "none", cursor: "pointer", marginLeft: 4 }}
+          >
+            <span style={{ fontSize: 20 }}>🛍</span>
+            {cartCount > 0 && (
+              <span style={{
+                position: "absolute", top: -4, right: -6,
+                background: "#be185d", color: "#fff",
+                borderRadius: "50%", width: 16, height: 16,
+                fontSize: 9, fontWeight: 800,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {cartCount}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+    </nav>
+  );
 }
