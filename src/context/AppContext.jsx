@@ -1,9 +1,9 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { apiFetch } from "../utils/api";
-
+ 
 export const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
-
+ 
 export function AppProvider({ children }) {
   const [user, setUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem("fitcheque_user")); }
@@ -11,12 +11,23 @@ export function AppProvider({ children }) {
   });
   const [cart, setCart] = useState([]);
   const [toasts, setToasts] = useState([]);
-
+ 
   const toast = (msg, type = "info") => {
     const id = Date.now();
     setToasts((t) => [...t, { id, msg, type }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   };
+ 
+  // Auto-logout when any API call receives a 401 (expired/invalid token)
+  useEffect(() => {
+    const handle = () => {
+      setUser(null);
+      setCart([]);
+      toast("Your session has expired. Please sign in again.", "error");
+    };
+    window.addEventListener("fitcheque:unauthorized", handle);
+    return () => window.removeEventListener("fitcheque:unauthorized", handle);
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -25,7 +36,7 @@ export function AppProvider({ children }) {
       setCart([]);
     }
   }, [user?.id]);
-
+ 
   const login = async (username, password) => {
     const data = await apiFetch("/login", {
       method: "POST",
@@ -37,7 +48,7 @@ export function AppProvider({ children }) {
     toast(`Welcome back, ${data.user.fullname}! 🌸`, "success");
     return data.user;
   };
-
+ 
   const logout = () => {
     localStorage.removeItem("fitcheque_token");
     localStorage.removeItem("fitcheque_user");
@@ -45,7 +56,7 @@ export function AppProvider({ children }) {
     setCart([]);
     toast("Logged out successfully.", "info");
   };
-
+ 
   const registerUser = async (form) => {
     const data = await apiFetch("/register", {
       method: "POST",
@@ -57,7 +68,7 @@ export function AppProvider({ children }) {
     toast(`Welcome to FITCHEQUE, ${data.user.username}! 🌸`, "success");
     return data.user;
   };
-
+ 
   const updateProfile = async (form) => {
     const data = await apiFetch("/me", {
       method: "PUT",
@@ -68,7 +79,7 @@ export function AppProvider({ children }) {
     setUser(updated);
     toast("Profile updated! ✨", "success");
   };
-
+ 
   const addToCart = async (product) => {
     if (user) {
       try {
@@ -76,56 +87,74 @@ export function AppProvider({ children }) {
           method: "POST",
           body: JSON.stringify({ product_id: product.id, quantity: 1 }),
         });
+        // ✅ FIX: Refresh cart from backend after adding
         const updated = await apiFetch("/cart");
         setCart(updated);
-      } catch {}
+        toast(`${product.title} added to cart! 🛍`, "success");
+      } catch (err) {
+        // ✅ FIX: Show error instead of silently failing
+        toast(err.message || "Failed to add to cart", "error");
+      }
     } else {
+      // ✅ FIX: Guest cart uses product_id consistently
       setCart((c) => {
-        const found = c.find((i) => i.id === product.id);
+        const found = c.find((i) => i.product_id === product.id);
         if (found)
           return c.map((i) =>
-            i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
+            i.product_id === product.id ? { ...i, quantity: i.quantity + 1 } : i
           );
-        return [...c, { ...product, quantity: 1 }];
+        return [...c, { ...product, product_id: product.id, quantity: 1 }];
       });
+      toast(`${product.title} added to cart! 🛍`, "success");
     }
-    toast(`${product.title} added to cart! 🛍`, "success");
   };
-
+ 
   const removeFromCart = async (id) => {
     if (user) {
       try {
+        // ✅ FIX: id here is the cart item id (from backend)
         await apiFetch(`/cart/${id}`, { method: "DELETE" });
         const updated = await apiFetch("/cart");
         setCart(updated);
-      } catch {}
+      } catch (err) {
+        toast(err.message || "Failed to remove item", "error");
+      }
     } else {
-      setCart((c) => c.filter((i) => i.id !== id));
+      // ✅ FIX: Guest cart removes by product_id
+      setCart((c) => c.filter((i) => i.product_id !== id && i.id !== id));
     }
   };
-
+ 
   const updateQty = async (id, qty) => {
     if (qty < 1) { removeFromCart(id); return; }
     if (user) {
       try {
+        // ✅ FIX: id here is the cart item id (from backend)
         await apiFetch(`/cart/${id}`, {
           method: "PUT",
           body: JSON.stringify({ quantity: qty }),
         });
         const updated = await apiFetch("/cart");
         setCart(updated);
-      } catch {}
+      } catch (err) {
+        toast(err.message || "Failed to update quantity", "error");
+      }
     } else {
-      setCart((c) => c.map((i) => (i.id === id ? { ...i, quantity: qty } : i)));
+      // ✅ FIX: Guest cart updates by product_id
+      setCart((c) =>
+        c.map((i) =>
+          i.product_id === id || i.id === id ? { ...i, quantity: qty } : i
+        )
+      );
     }
   };
-
+ 
   const ctx = {
     user, cart, toasts,
     login, logout, registerUser, updateProfile,
     addToCart, removeFromCart, updateQty,
     toast,
   };
-
+ 
   return <AppContext.Provider value={ctx}>{children}</AppContext.Provider>;
 }

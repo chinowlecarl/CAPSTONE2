@@ -8,13 +8,12 @@ export function Header({ page, setPage }) {
   const [open, setOpen] = useState(false);
 
   const links = [
-    { label: "NEW ARRIVALS", to: "products" },
-    { label: "HOME", to: "home" },
-    { label: "PRODUCT", to: "products" },
+    { label: "NEW ARRIVALS", to: "home" },
+    { label: "HOME", to: "products" },
     { label: "CART", to: "cart" },
     { label: "ABOUT", to: "about" },
   ];
-
+  
   return (
     <nav style={{
       background: "#fff",

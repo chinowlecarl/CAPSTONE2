@@ -1,9 +1,9 @@
 import { useApp } from "../context/AppContext";
 import { fmt, salePrice } from "../utils/api";
-
+ 
 export default function Cart({ setPage }) {
   const { cart, removeFromCart, updateQty, user } = useApp();
-
+ 
   const getPrice = (item) => {
     const p = item.products || item;
     return salePrice(p.price, p.discount);
@@ -11,18 +11,18 @@ export default function Cart({ setPage }) {
   const getName = (item) => item.products?.title || item.title;
   const getImg = (item) => item.products?.image_url || item.image_url;
   const getCat = (item) => item.products?.category || item.category;
-
+ 
   const subtotal = cart.reduce((s, i) => s + getPrice(i) * i.quantity, 0);
   const shipping = subtotal > 500 ? 0 : 80;
   const tax = subtotal * 0.12;
   const total = subtotal + shipping + tax;
-
+ 
   return (
     <div style={{ background: "#fff5f7", minHeight: "100vh" }}>
       <div style={{ background: "linear-gradient(135deg, #fce7f3, #fbcfe8)", padding: "28px 24px", textAlign: "center" }}>
         <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, fontWeight: 900, color: "#1a1a1a", margin: 0, letterSpacing: 2 }}>SHOPPING CART</h1>
       </div>
-
+ 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px", display: "grid", gridTemplateColumns: cart.length > 0 ? "1fr 340px" : "1fr", gap: 24 }}>
         <div>
           {cart.length === 0 ? (
@@ -57,7 +57,7 @@ export default function Cart({ setPage }) {
             </div>
           )}
         </div>
-
+ 
         {cart.length > 0 && (
           <div style={{ background: "#fff", borderRadius: 16, padding: 24, border: "1px solid #fce7f3", height: "fit-content", boxShadow: "0 4px 20px rgba(190,24,93,0.08)" }}>
             <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 900, color: "#1a1a1a", margin: "0 0 20px", paddingBottom: 14, borderBottom: "1.5px solid #fce7f3" }}>ORDER SUMMARY</h3>
@@ -72,7 +72,7 @@ export default function Cart({ setPage }) {
               <span style={{ color: "#be185d" }}>{fmt(total)}</span>
             </div>
             <button
-              onClick={() => !user && setPage("login")}
+              onClick={() => user ? setPage("checkout") : setPage("login")}
               style={{ width: "100%", background: "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, letterSpacing: 1, padding: "14px 0", cursor: "pointer", marginTop: 20 }}
             >
               {user ? "PROCEED TO CHECKOUT" : "LOGIN TO CHECKOUT"}
