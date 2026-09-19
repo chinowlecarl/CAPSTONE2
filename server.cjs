@@ -551,6 +551,62 @@ app.post("/api/orders", auth, async (req, res) => {
   }
 });
 
+// PUT /api/orders/:id — allow a logged-in customer to cancel their OWN order.
+app.put("/api/orders/:id", auth, async (req, res) => {
+  const { status } = req.body;
+
+  if (status !== "cancelled")
+    return res.status(400).json({ error: "Invalid status value" });
+
+  try {
+    const { data: existingOrder, error: findErr } = await supabase
+      .from("orders")
+      .select("id, user_id, status")
+      .eq("id", req.params.id)
+      .eq("user_id", req.user.id)
+      .single();
+
+    if (findErr || !existingOrder)
+      return res.status(404).json({ error: "Order not found" });
+
+    if (!["pending", "confirmed"].includes(existingOrder.status))
+      return res.status(400).json({ error: "This order can no longer be cancelled" });
+
+    const { data: orderItems } = await supabase
+      .from("order_items")
+      .select("product_id, quantity, products(stock)")
+      .eq("order_id", req.params.id);
+
+    if (orderItems?.length) {
+      for (const item of orderItems) {
+        const restoredStock = (item.products?.stock || 0) + item.quantity;
+        const { error: stockErr } = await supabase
+          .from("products")
+          .update({ stock: restoredStock })
+          .eq("id", item.product_id);
+        if (stockErr) {
+          console.error(`[STOCK RESTORE ERROR] product ${item.product_id}: ${stockErr.message}`);
+        }
+      }
+    }
+
+    const { data, error } = await supabase
+      .from("orders")
+      .update({ status: "cancelled" })
+      .eq("id", req.params.id)
+      .eq("user_id", req.user.id)
+      .select()
+      .single();
+    if (error) throw error;
+
+    console.log(`[ORDER CANCELLED] ${new Date().toISOString()} - Order ${req.params.id} by user ${req.user.id}`);
+    res.json({ message: "Order cancelled!", order: data });
+  } catch (err) {
+    console.error(`[CANCEL ORDER ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to cancel order" });
+  }
+});
+
 // ============================================================
 // ADMIN
 // ============================================================

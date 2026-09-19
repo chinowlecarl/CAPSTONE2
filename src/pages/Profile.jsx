@@ -23,11 +23,13 @@ function StatusBadge({ status }) {
   );
 }
 
-function OrderCard({ order }) {
+function OrderCard({ order, onCancel, cancelling }) {
   const [open, setOpen] = useState(false);
   const date = new Date(order.created_at).toLocaleDateString("en-PH", {
     year: "numeric", month: "short", day: "numeric",
   });
+
+  const canCancel = order.status === "pending" || order.status === "confirmed";
 
   return (
     <div style={{
@@ -129,6 +131,23 @@ function OrderCard({ order }) {
             <span style={{ fontSize: 13, color: "#888", marginRight: 12 }}>Order Total</span>
             <span style={{ fontSize: 16, fontWeight: 900, color: "#be185d" }}>{fmt(order.total_amount)}</span>
           </div>
+
+          {/* Cancel order */}
+          {canCancel && (
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px dashed #fce7f3", display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); onCancel(order.id); }}
+                disabled={cancelling}
+                style={{
+                  background: "#fff", border: "1.5px solid #fecaca", color: "#ef4444",
+                  fontWeight: 700, fontSize: 12, padding: "9px 18px", borderRadius: 10,
+                  cursor: cancelling ? "not-allowed" : "pointer", opacity: cancelling ? 0.6 : 1,
+                }}
+              >
+                {cancelling ? "CANCELLING..." : "✕ CANCEL ORDER"}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -150,6 +169,7 @@ export default function Profile({ setPage }) {
   const [orders, setOrders]       = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError]     = useState(null);
+  const [cancellingId, setCancellingId]   = useState(null);
 
   useEffect(() => {
     if (activeTab === "orders" && user) {
@@ -174,6 +194,22 @@ export default function Profile({ setPage }) {
     try { await updateProfile(form); setEdit(false); }
     catch (err) { toast(err.message, "error"); }
     setLoading(false);
+  };
+
+  const cancelOrder = async (orderId) => {
+    if (!window.confirm("Cancel this order? This cannot be undone.")) return;
+    setCancellingId(orderId);
+    try {
+      await apiFetch(`/orders/${orderId}`, {
+        method: "PUT",
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+      setOrders((os) => os.map((o) => o.id === orderId ? { ...o, status: "cancelled" } : o));
+      toast("Order cancelled.", "success");
+    } catch (err) {
+      toast(err.message || "Failed to cancel order", "error");
+    }
+    setCancellingId(null);
   };
 
   const tabStyle = (tab) => ({
@@ -296,7 +332,12 @@ export default function Profile({ setPage }) {
                   {orders.length} order{orders.length !== 1 ? "s" : ""} found — tap any order to expand
                 </p>
                 {orders.map((order) => (
-                  <OrderCard key={order.id} order={order} />
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    onCancel={cancelOrder}
+                    cancelling={cancellingId === order.id}
+                  />
                 ))}
               </div>
             )}
