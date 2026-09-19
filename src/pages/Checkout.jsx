@@ -10,7 +10,7 @@ const PAYMENT_METHODS = [
 ];
 
 export default function Checkout({ setPage }) {
-  const { user, cart, toast } = useApp();
+  const { user, cart, toast, clearCart } = useApp();
 
   const getPrice = (item) => {
     const p = item.products || item;
@@ -71,6 +71,7 @@ export default function Checkout({ setPage }) {
         body: JSON.stringify({ shipping_address }),
       });
       setOrderId(data.order?.id);
+      await clearCart();
       setStep(3);
       toast("Order placed successfully! 🎉", "success");
     } catch (err) {

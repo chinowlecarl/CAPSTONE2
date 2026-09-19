@@ -1,9 +1,9 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { apiFetch } from "../utils/api";
- 
+
 export const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
- 
+
 export function AppProvider({ children }) {
   const [user, setUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem("fitcheque_user")); }
@@ -11,13 +11,13 @@ export function AppProvider({ children }) {
   });
   const [cart, setCart] = useState([]);
   const [toasts, setToasts] = useState([]);
- 
+
   const toast = (msg, type = "info") => {
     const id = Date.now();
     setToasts((t) => [...t, { id, msg, type }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   };
- 
+
   // Auto-logout when any API call receives a 401 (expired/invalid token)
   useEffect(() => {
     const handle = () => {
@@ -36,7 +36,7 @@ export function AppProvider({ children }) {
       setCart([]);
     }
   }, [user?.id]);
- 
+
   const login = async (username, password) => {
     const data = await apiFetch("/login", {
       method: "POST",
@@ -52,7 +52,7 @@ export function AppProvider({ children }) {
     setUser(data.user);
     toast(`Welcome back, ${data.user.fullname}! 🌸`, "success");
   };
- 
+
   const logout = () => {
     localStorage.removeItem("fitcheque_token");
     localStorage.removeItem("fitcheque_user");
@@ -60,7 +60,7 @@ export function AppProvider({ children }) {
     setCart([]);
     toast("Logged out successfully.", "info");
   };
- 
+
   const registerUser = async (form) => {
     const data = await apiFetch("/register", {
       method: "POST",
@@ -76,7 +76,7 @@ export function AppProvider({ children }) {
     setUser(data.user);
     toast(`Welcome to FITCHEQUE, ${data.user.username}! 🌸`, "success");
   };
- 
+
   const updateProfile = async (form) => {
     const data = await apiFetch("/me", {
       method: "PUT",
@@ -87,7 +87,7 @@ export function AppProvider({ children }) {
     setUser(updated);
     toast("Profile updated! ✨", "success");
   };
- 
+
   const addToCart = async (product) => {
     if (user) {
       try {
@@ -113,7 +113,7 @@ export function AppProvider({ children }) {
       toast(`${product.title} added to cart! 🛍`, "success");
     }
   };
- 
+
   const removeFromCart = async (id) => {
     if (user) {
       try {
@@ -127,7 +127,7 @@ export function AppProvider({ children }) {
       setCart((c) => c.filter((i) => i.product_id !== id && i.id !== id));
     }
   };
- 
+
   const updateQty = async (id, qty) => {
     if (qty < 1) { removeFromCart(id); return; }
     if (user) {
@@ -149,13 +149,28 @@ export function AppProvider({ children }) {
       );
     }
   };
- 
+
+  // Clear cart after a successful order — refresh from server if logged in
+  // (in case the backend already emptied it), otherwise just clear local state.
+  const clearCart = async () => {
+    if (user) {
+      try {
+        const updated = await apiFetch("/cart");
+        setCart(updated);
+      } catch {
+        setCart([]);
+      }
+    } else {
+      setCart([]);
+    }
+  };
+
   const ctx = {
     user, cart, toasts,
     login, logout, registerUser, completeLogin, completeRegister, updateProfile,
-    addToCart, removeFromCart, updateQty,
+    addToCart, removeFromCart, updateQty, clearCart,
     toast,
   };
- 
+
   return <AppContext.Provider value={ctx}>{children}</AppContext.Provider>;
 }
