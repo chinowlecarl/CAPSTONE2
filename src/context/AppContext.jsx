@@ -42,11 +42,15 @@ export function AppProvider({ children }) {
       method: "POST",
       body: JSON.stringify({ username, password }),
     });
+    // Don't commit the session yet — wait for OTP verification
+    return data; // { token, user }
+  };
+
+  const completeLogin = (data) => {
     localStorage.setItem("fitcheque_token", data.token);
     localStorage.setItem("fitcheque_user", JSON.stringify(data.user));
     setUser(data.user);
     toast(`Welcome back, ${data.user.fullname}! 🌸`, "success");
-    return data.user;
   };
  
   const logout = () => {
@@ -62,11 +66,15 @@ export function AppProvider({ children }) {
       method: "POST",
       body: JSON.stringify(form),
     });
+    // Don't commit the session yet — wait for OTP verification
+    return data; // { token, user }
+  };
+
+  const completeRegister = (data) => {
     localStorage.setItem("fitcheque_token", data.token);
     localStorage.setItem("fitcheque_user", JSON.stringify(data.user));
     setUser(data.user);
     toast(`Welcome to FITCHEQUE, ${data.user.username}! 🌸`, "success");
-    return data.user;
   };
  
   const updateProfile = async (form) => {
@@ -87,16 +95,13 @@ export function AppProvider({ children }) {
           method: "POST",
           body: JSON.stringify({ product_id: product.id, quantity: 1 }),
         });
-        // ✅ FIX: Refresh cart from backend after adding
         const updated = await apiFetch("/cart");
         setCart(updated);
         toast(`${product.title} added to cart! 🛍`, "success");
       } catch (err) {
-        // ✅ FIX: Show error instead of silently failing
         toast(err.message || "Failed to add to cart", "error");
       }
     } else {
-      // ✅ FIX: Guest cart uses product_id consistently
       setCart((c) => {
         const found = c.find((i) => i.product_id === product.id);
         if (found)
@@ -112,7 +117,6 @@ export function AppProvider({ children }) {
   const removeFromCart = async (id) => {
     if (user) {
       try {
-        // ✅ FIX: id here is the cart item id (from backend)
         await apiFetch(`/cart/${id}`, { method: "DELETE" });
         const updated = await apiFetch("/cart");
         setCart(updated);
@@ -120,7 +124,6 @@ export function AppProvider({ children }) {
         toast(err.message || "Failed to remove item", "error");
       }
     } else {
-      // ✅ FIX: Guest cart removes by product_id
       setCart((c) => c.filter((i) => i.product_id !== id && i.id !== id));
     }
   };
@@ -129,7 +132,6 @@ export function AppProvider({ children }) {
     if (qty < 1) { removeFromCart(id); return; }
     if (user) {
       try {
-        // ✅ FIX: id here is the cart item id (from backend)
         await apiFetch(`/cart/${id}`, {
           method: "PUT",
           body: JSON.stringify({ quantity: qty }),
@@ -140,7 +142,6 @@ export function AppProvider({ children }) {
         toast(err.message || "Failed to update quantity", "error");
       }
     } else {
-      // ✅ FIX: Guest cart updates by product_id
       setCart((c) =>
         c.map((i) =>
           i.product_id === id || i.id === id ? { ...i, quantity: qty } : i
@@ -151,7 +152,7 @@ export function AppProvider({ children }) {
  
   const ctx = {
     user, cart, toasts,
-    login, logout, registerUser, updateProfile,
+    login, logout, registerUser, completeLogin, completeRegister, updateProfile,
     addToCart, removeFromCart, updateQty,
     toast,
   };

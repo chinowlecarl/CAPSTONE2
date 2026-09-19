@@ -148,6 +148,7 @@ function ProductModal({ product, onClose, onAddToCart }) {
   const images = getImages(product);
   const [idx, setIdx] = useState(0);
   const sp = salePrice(product.price, product.discount);
+  const soldOut = product.stock === 0;
 
   // Close on backdrop click
   const onBackdrop = (e) => { if (e.target === e.currentTarget) onClose(); };
@@ -200,10 +201,10 @@ function ProductModal({ product, onClose, onAddToCart }) {
               <img
                 src={images[idx]}
                 alt={`${product.title} – view ${idx + 1}`}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                style={{ width: "100%", height: "100%", objectFit: "cover", filter: soldOut ? "grayscale(0.6)" : "none" }}
                 onError={(e) => { e.target.src = "https://placehold.co/600x400/fce7f3/be185d?text=FITCHEQUE"; }}
               />
-              {product.discount > 0 && (
+              {product.discount > 0 && !soldOut && (
                 <span style={{
                   position: "absolute", top: 12, right: 12,
                   background: "#be185d", color: "#fff",
@@ -292,31 +293,31 @@ function ProductModal({ product, onClose, onAddToCart }) {
               {product.description || "No description available."}
             </p>
 
-            {/* Stock badge */}
+            {/* Stock badge — single item only, so just Available / Sold */}
             <div>
               <span style={{
                 padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700,
-                background: product.stock === 0 ? "#fff5f5" : product.stock < 5 ? "#fffbeb" : "#f0fdf4",
-                color: product.stock === 0 ? "#ef4444" : product.stock < 5 ? "#f59e0b" : "#22c55e",
-                border: `1px solid ${product.stock === 0 ? "#fecaca" : product.stock < 5 ? "#fde68a" : "#bbf7d0"}`,
+                background: soldOut ? "#fff5f5" : "#f0fdf4",
+                color: soldOut ? "#ef4444" : "#22c55e",
+                border: `1px solid ${soldOut ? "#fecaca" : "#bbf7d0"}`,
               }}>
-                {product.stock === 0 ? "Out of Stock" : product.stock < 5 ? `Only ${product.stock} left!` : `In Stock (${product.stock})`}
+                {soldOut ? "Sold" : "Available — 1 of a kind"}
               </span>
             </div>
 
             {/* Add to cart */}
             <button
               onClick={() => { onAddToCart(product); onClose(); }}
-              disabled={product.stock === 0}
+              disabled={soldOut}
               style={{
-                background: product.stock === 0 ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
-                border: "none", borderRadius: 12, color: product.stock === 0 ? "#9ca3af" : "#fff",
+                background: soldOut ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
+                border: "none", borderRadius: 12, color: soldOut ? "#9ca3af" : "#fff",
                 fontWeight: 800, fontSize: 14, letterSpacing: 1, padding: "14px 0",
-                cursor: product.stock === 0 ? "not-allowed" : "pointer",
+                cursor: soldOut ? "not-allowed" : "pointer",
                 marginTop: "auto",
               }}
             >
-              {product.stock === 0 ? "OUT OF STOCK" : "ADD TO CART"}
+              {soldOut ? "SOLD" : "ADD TO CART"}
             </button>
           </div>
         </div>
@@ -325,12 +326,13 @@ function ProductModal({ product, onClose, onAddToCart }) {
   );
 }
 
-// ── Card (everything below is identical to the original) ─────────────────────
+// ── Card ───────────────────────────────────────────────────────────────────
 export function Card({ product, compact = false }) {
   const { addToCart } = useApp();
   const [showModal, setShowModal] = useState(false);
   const sp = salePrice(product.price, product.discount);
   const images = getImages(product);
+  const soldOut = product.stock === 0;
 
   return (
     <>
@@ -351,6 +353,7 @@ export function Card({ product, compact = false }) {
         border: "1px solid #fce7f3",
         transition: "transform .25s, box-shadow .25s",
         cursor: "pointer",
+        opacity: soldOut ? 0.75 : 1,
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = "translateY(-4px)";
@@ -363,10 +366,22 @@ export function Card({ product, compact = false }) {
     >
       {/* Image area */}
       <div style={{ position: "relative", height: compact ? 140 : 220, overflow: "hidden" }}>
-        <ImageViewer images={images} height={compact ? 140 : 220} title={product.title} />
+        <div style={{ filter: soldOut ? "grayscale(0.7)" : "none", height: "100%" }}>
+          <ImageViewer images={images} height={compact ? 140 : 220} title={product.title} />
+        </div>
 
+        {/* Sold Out overlay badge */}
+        {soldOut && (
+          <span style={{
+            position: "absolute", top: 8, right: 8, zIndex: 4,
+            background: "#ef4444", color: "#fff",
+            fontSize: 10, fontWeight: 800, padding: "3px 8px", borderRadius: 20,
+          }}>
+            SOLD
+          </span>
+        )}
         {/* Discount badge */}
-        {product.discount > 0 && (
+        {!soldOut && product.discount > 0 && (
           <span style={{
             position: "absolute", top: 8, right: 8, zIndex: 4,
             background: "#be185d", color: "#fff",
@@ -418,16 +433,18 @@ export function Card({ product, compact = false }) {
           </span>
         </div>
         <button
-          onClick={(e) => { e.stopPropagation(); addToCart(product); }}
+          onClick={(e) => { e.stopPropagation(); if (!soldOut) addToCart(product); }}
+          disabled={soldOut}
           style={{
             width: "100%",
-            background: "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
-            border: "none", borderRadius: 8, color: "#fff",
+            background: soldOut ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
+            border: "none", borderRadius: 8, color: soldOut ? "#9ca3af" : "#fff",
             fontWeight: 700, fontSize: compact ? 10 : 12, letterSpacing: 0.8,
-            padding: compact ? "7px 0" : "10px 0", cursor: "pointer",
+            padding: compact ? "7px 0" : "10px 0",
+            cursor: soldOut ? "not-allowed" : "pointer",
           }}
         >
-          ADD TO CART
+          {soldOut ? "SOLD" : "ADD TO CART"}
         </button>
       </div>
     </div>

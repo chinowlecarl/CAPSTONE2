@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useApp } from "../context/AppContext";
 
 export default function SignIn({ setPage }) {
-  const { login } = useApp();
+  const { login, completeLogin } = useApp();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -13,8 +13,9 @@ export default function SignIn({ setPage }) {
     if (!username || !password) { setError("Please fill in all fields."); return; }
     setLoading(true); setError("");
     try {
-      const user = await login(username, password);
-      setPage(user.role === "admin" ? "admin" : "home");
+      const data = await login(username, password);
+      completeLogin(data);
+      setPage(data.user.role === "admin" ? "admin" : "home");
     } catch (err) {
       setError(err.message);
     }
@@ -23,11 +24,9 @@ export default function SignIn({ setPage }) {
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, position: "relative", overflow: "hidden" }}>
-      {/* Background photo + gradient */}
       <div style={{ position: "absolute", inset: 0, backgroundImage: "url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&q=70')", backgroundSize: "cover", backgroundPosition: "center", zIndex: 0 }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(252,231,243,0.88) 0%, rgba(251,207,232,0.88) 40%, rgba(249,168,212,0.88) 100%)", zIndex: 1 }} />
 
-      {/* Centered card */}
       <div style={{ position: "relative", zIndex: 2, width: "100%", maxWidth: 380, background: "#fff", borderRadius: 20, boxShadow: "0 20px 60px rgba(190, 24, 93, 0.3)", padding: "48px 40px" }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 32, fontWeight: 900, color: "#1a1a1a", letterSpacing: 2, marginBottom: 4 }}>FITCHEQUE</div>

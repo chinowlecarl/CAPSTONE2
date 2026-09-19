@@ -1,29 +1,29 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { fmt, salePrice, apiFetch } from "../utils/api";
- 
+
 const PAYMENT_METHODS = [
   { id: "cod",    label: "Cash on Delivery",  icon: "💵", desc: "Pay when your order arrives" },
   { id: "gcash",  label: "GCash",             icon: "📱", desc: "Pay via GCash mobile wallet" },
   { id: "maya",   label: "Maya",              icon: "💳", desc: "Pay via Maya (PayMaya)" },
   { id: "card",   label: "Credit / Debit Card", icon: "🏦", desc: "Visa, Mastercard accepted" },
 ];
- 
+
 export default function Checkout({ setPage }) {
   const { user, cart, toast } = useApp();
- 
+
   const getPrice = (item) => {
     const p = item.products || item;
     return salePrice(p.price, p.discount);
   };
   const getName = (item) => item.products?.title || item.title;
   const getImg  = (item) => item.products?.image_url || item.image_url;
- 
+
   const subtotal = cart.reduce((s, i) => s + getPrice(i) * i.quantity, 0);
   const shipping = subtotal > 500 ? 0 : 80;
   const tax      = subtotal * 0.12;
   const total    = subtotal + shipping + tax;
- 
+
   const [step, setStep]       = useState(1); // 1=details, 2=payment, 3=success
   const [payment, setPayment] = useState("cod");
   const [loading, setLoading] = useState(false);
@@ -39,10 +39,10 @@ export default function Checkout({ setPage }) {
     notes:    "",
   });
   const [cardForm, setCardForm] = useState({ number: "", name: "", expiry: "", cvv: "" });
- 
+
   const sf  = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const scf = (k) => (e) => setCardForm((f) => ({ ...f, [k]: e.target.value }));
- 
+
   const inputStyle = {
     width: "100%", padding: "10px 14px",
     border: "1.5px solid #fce7f3", borderRadius: 10,
@@ -54,13 +54,13 @@ export default function Checkout({ setPage }) {
     color: "#888", letterSpacing: 1.5, marginBottom: 6,
     textTransform: "uppercase",
   };
- 
+
   const validateStep1 = () => {
     if (!form.fullname || !form.email || !form.phone || !form.city)
       return false;
     return true;
   };
- 
+
   const placeOrder = async () => {
     setLoading(true);
     try {
@@ -78,7 +78,7 @@ export default function Checkout({ setPage }) {
     }
     setLoading(false);
   };
- 
+
   // Redirect if not logged in or cart empty
   if (!user)  return (
     <div style={{ textAlign: "center", padding: "80px 24px" }}>
@@ -87,7 +87,7 @@ export default function Checkout({ setPage }) {
       <button onClick={() => setPage("login")} style={{ background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 20, color: "#fff", fontWeight: 700, padding: "10px 28px", cursor: "pointer" }}>LOGIN</button>
     </div>
   );
- 
+
   if (cart.length === 0 && step !== 3) return (
     <div style={{ textAlign: "center", padding: "80px 24px" }}>
       <div style={{ fontSize: 48, marginBottom: 16 }}>🛍</div>
@@ -95,7 +95,7 @@ export default function Checkout({ setPage }) {
       <button onClick={() => setPage("products")} style={{ background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 20, color: "#fff", fontWeight: 700, padding: "10px 28px", cursor: "pointer" }}>BROWSE PRODUCTS</button>
     </div>
   );
- 
+
   // ── SUCCESS SCREEN ──────────────────────────────────────────
   if (step === 3) return (
     <div style={{ minHeight: "100vh", background: "#fff5f7", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -130,7 +130,7 @@ export default function Checkout({ setPage }) {
       </div>
     </div>
   );
- 
+
   return (
     <div style={{ background: "#fff5f7", minHeight: "100vh" }}>
       {/* Header */}
@@ -149,16 +149,16 @@ export default function Checkout({ setPage }) {
           ))}
         </div>
       </div>
- 
+
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px", display: "grid", gridTemplateColumns: "1fr 340px", gap: 24 }}>
- 
+
         {/* Left — Steps */}
         <div>
           {/* STEP 1 — Delivery Details */}
           {step === 1 && (
             <div style={{ background: "#fff", borderRadius: 16, padding: 28, border: "1px solid #fce7f3", boxShadow: "0 2px 16px rgba(190,24,93,0.06)" }}>
               <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 900, color: "#1a1a1a", margin: "0 0 24px" }}>Delivery Details</h2>
- 
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>Full Name *</label>
@@ -201,20 +201,29 @@ export default function Checkout({ setPage }) {
                     style={{ ...inputStyle, resize: "none" }} onFocus={(e)=>(e.target.style.borderColor="#db2777")} onBlur={(e)=>(e.target.style.borderColor="#fce7f3")} />
                 </div>
               </div>
- 
-              <button
-                onClick={() => { if (validateStep1()) setStep(2); else alert("Please fill in all required fields."); }}
-                style={{ width: "100%", background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 12, color: "#fff", fontWeight: 800, fontSize: 14, letterSpacing: 1, padding: "14px 0", cursor: "pointer", marginTop: 24 }}>
-                CONTINUE TO PAYMENT →
-              </button>
+
+              <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
+                <button
+                  onClick={() => setPage("cart")}
+                  style={{ flex: 1, background: "#fff", border: "1.5px solid #fce7f3", borderRadius: 12, color: "#be185d", fontWeight: 700, fontSize: 13, padding: "13px 0", cursor: "pointer" }}
+                >
+                  ← BACK TO CART
+                </button>
+                <button
+                  onClick={() => { if (validateStep1()) setStep(2); else alert("Please fill in all required fields."); }}
+                  style={{ flex: 2, background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 12, color: "#fff", fontWeight: 800, fontSize: 14, letterSpacing: 1, padding: "14px 0", cursor: "pointer" }}
+                >
+                  CONTINUE TO PAYMENT →
+                </button>
+              </div>
             </div>
           )}
- 
+
           {/* STEP 2 — Payment */}
           {step === 2 && (
             <div style={{ background: "#fff", borderRadius: 16, padding: 28, border: "1px solid #fce7f3", boxShadow: "0 2px 16px rgba(190,24,93,0.06)" }}>
               <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 900, color: "#1a1a1a", margin: "0 0 24px" }}>Payment Method</h2>
- 
+
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
                 {PAYMENT_METHODS.map((pm) => (
                   <button key={pm.id} onClick={() => setPayment(pm.id)}
@@ -230,7 +239,7 @@ export default function Checkout({ setPage }) {
                   </button>
                 ))}
               </div>
- 
+
               {/* Card form */}
               {payment === "card" && (
                 <div style={{ background: "#fff5f7", borderRadius: 12, padding: 20, border: "1px solid #fce7f3", marginBottom: 20 }}>
@@ -261,7 +270,7 @@ export default function Checkout({ setPage }) {
                   </div>
                 </div>
               )}
- 
+
               {/* GCash instructions */}
               {payment === "gcash" && (
                 <div style={{ background: "#fff5f7", borderRadius: 12, padding: 20, border: "1px solid #fce7f3", marginBottom: 20 }}>
@@ -271,7 +280,7 @@ export default function Checkout({ setPage }) {
                   <p style={{ fontSize: 12, color: "#aaa", margin: 0 }}>Use your Order ID as reference after placing order.</p>
                 </div>
               )}
- 
+
               {/* Maya instructions */}
               {payment === "maya" && (
                 <div style={{ background: "#fff5f7", borderRadius: 12, padding: 20, border: "1px solid #fce7f3", marginBottom: 20 }}>
@@ -281,7 +290,7 @@ export default function Checkout({ setPage }) {
                   <p style={{ fontSize: 12, color: "#aaa", margin: 0 }}>Use your Order ID as reference after placing order.</p>
                 </div>
               )}
- 
+
               {/* Delivery summary */}
               <div style={{ background: "#fff5f7", borderRadius: 12, padding: 16, border: "1px solid #fce7f3", marginBottom: 20 }}>
                 <p style={{ fontSize: 10, fontWeight: 800, color: "#be185d", letterSpacing: 1.5, margin: "0 0 10px" }}>DELIVERING TO</p>
@@ -290,7 +299,7 @@ export default function Checkout({ setPage }) {
                 <p style={{ fontSize: 12, color: "#888", margin: 0 }}>{form.phone}</p>
                 <button onClick={() => setStep(1)} style={{ background: "none", border: "none", color: "#be185d", fontSize: 12, fontWeight: 700, cursor: "pointer", padding: "6px 0 0", textDecoration: "underline" }}>Edit details</button>
               </div>
- 
+
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={() => setStep(1)} style={{ flex: 1, background: "#fff", border: "1.5px solid #fce7f3", borderRadius: 12, color: "#be185d", fontWeight: 700, fontSize: 13, padding: "13px 0", cursor: "pointer" }}>← BACK</button>
                 <button onClick={placeOrder} disabled={loading}
@@ -301,14 +310,14 @@ export default function Checkout({ setPage }) {
             </div>
           )}
         </div>
- 
+
         {/* Right — Order Summary */}
         <div>
           <div style={{ background: "#fff", borderRadius: 16, padding: 24, border: "1px solid #fce7f3", boxShadow: "0 4px 20px rgba(190,24,93,0.08)", position: "sticky", top: 80 }}>
             <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 900, color: "#1a1a1a", margin: "0 0 16px", paddingBottom: 14, borderBottom: "1.5px solid #fce7f3" }}>
               Order Summary
             </h3>
- 
+
             {/* Cart items */}
             <div style={{ maxHeight: 240, overflowY: "auto", marginBottom: 16 }}>
               {cart.map((item, idx) => (
@@ -323,7 +332,7 @@ export default function Checkout({ setPage }) {
                 </div>
               ))}
             </div>
- 
+
             {/* Totals */}
             <div style={{ borderTop: "1.5px solid #fce7f3", paddingTop: 14 }}>
               {[["Subtotal", fmt(subtotal)], ["Shipping", shipping === 0 ? "FREE" : fmt(shipping)], ["Tax (12%)", fmt(tax)]].map(([label, val]) => (
@@ -337,7 +346,7 @@ export default function Checkout({ setPage }) {
                 <span style={{ color: "#be185d" }}>{fmt(total)}</span>
               </div>
             </div>
- 
+
             {shipping === 0 && (
               <div style={{ background: "#f0fdf4", borderRadius: 8, padding: "8px 12px", marginTop: 12, border: "1px solid #bbf7d0", fontSize: 12, color: "#16a34a", fontWeight: 600 }}>
                 🎉 You qualify for FREE shipping!

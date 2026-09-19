@@ -117,7 +117,7 @@ export default function ManageProducts({ setPage }) {
   const [catFilter, setCatFilter] = useState("All");
 
   const [form, setForm] = useState({
-    title:"", description:"", price:"", discount:"0", category:"", stock:"",
+    title:"", description:"", price:"", discount:"0", category:"", stock:"1",
     featured:false, image_url:"",
     extra_images: ["", "", ""],
   });
@@ -146,7 +146,7 @@ export default function ManageProducts({ setPage }) {
   }, [user?.id]);
 
   const openAdd = () => {
-    setForm({ title:"", description:"", price:"", discount:"0", category:"", stock:"", featured:false, image_url:"", extra_images:["","",""] });
+    setForm({ title:"", description:"", price:"", discount:"0", category:"", stock:"1", featured:false, image_url:"", extra_images:["","",""] });
     setEditP(null); setModal(true);
   };
   const openEdit = (p) => {
@@ -199,6 +199,8 @@ export default function ManageProducts({ setPage }) {
     return matchCat && matchSearch;
   });
 
+  const soldOutCount = products.filter((p) => p.stock === 0).length;
+
   if (!user || user.role !== "admin") return null;
 
   const inputStyle = { width:"100%", padding:"10px 12px", border:"1.5px solid #fce7f3", borderRadius:10, fontSize:13, outline:"none", background:"#fff5f7", boxSizing:"border-box" };
@@ -213,7 +215,7 @@ export default function ManageProducts({ setPage }) {
           ["👥", stats.total_customers||0,"Customers", "#db2777"],
           ["🛍", stats.total_orders||0,   "Orders",    "#f472b6"],
           ["₱",  `₱${(stats.total_revenue||0).toFixed(0)}`, "Revenue", "#be185d"],
-          ["⚠️", stats.low_stock||0,      "Low Stock", "#9f1239"],
+          ["🚫", soldOutCount,             "Sold Out",  "#9f1239"],
         ].map(([icon, val, label, color]) => (
           <div key={label} style={{ background:"#fff", borderRadius:14, padding:18, border:"1px solid #fce7f3", boxShadow:"0 2px 12px rgba(190,24,93,0.06)", textAlign:"center" }}>
             <div style={{ fontSize:22, marginBottom:4 }}>{icon}</div>
@@ -259,7 +261,7 @@ export default function ManageProducts({ setPage }) {
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
               <thead>
                 <tr style={{ background:"linear-gradient(135deg,#fce7f3,#fbcfe8)" }}>
-                  {["Image","Product","Category","Price","Stock","Featured","Actions"].map((h)=>(
+                  {["Image","Product","Category","Price","Availability","Featured","Actions"].map((h)=>(
                     <th key={h} style={{ padding:"12px 14px", textAlign:"left", fontSize:10, fontWeight:800, color:"#be185d", letterSpacing:1.2, textTransform:"uppercase", borderBottom:"1.5px solid #fce7f3" }}>{h}</th>
                   ))}
                 </tr>
@@ -289,8 +291,8 @@ export default function ManageProducts({ setPage }) {
                       ) : <div style={{ fontWeight:700 }}>{fmt(p.price)}</div>}
                     </td>
                     <td style={{ padding:"18px 14px" }}>
-                      <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:700, background:p.stock===0?"#fff5f5":p.stock<5?"#fffbeb":"#f0fdf4", color:p.stock===0?"#ef4444":p.stock<5?"#f59e0b":"#22c55e" }}>
-                        {p.stock===0?"Out":p.stock<5?`${p.stock} Low`:p.stock}
+                      <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:700, background:p.stock===0?"#fff5f5":"#f0fdf4", color:p.stock===0?"#ef4444":"#22c55e" }}>
+                        {p.stock===0 ? "Sold" : "Available"}
                       </span>
                     </td>
                     <td style={{ padding:"18px 14px", textAlign:"center" }}>
@@ -319,7 +321,7 @@ export default function ManageProducts({ setPage }) {
             </div>
             <div style={{ padding:24, display:"flex", flexDirection:"column", gap:14 }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-                {[["Title *","title","text"],["Category *","category","select"],["Price (₱) *","price","number"],["Discount (%)","discount","number"],["Stock *","stock","number"]].map(([label,key,type])=>(
+                {[["Title *","title","text"],["Category *","category","select"],["Price (₱) *","price","number"],["Discount (%)","discount","number"]].map(([label,key,type])=>(
                   <div key={key} style={key==="title"?{gridColumn:"1/-1"}:{}}>
                     <label style={{ display:"block", fontSize:10, fontWeight:800, color:"#888", letterSpacing:1.5, marginBottom:6 }}>{label.toUpperCase()}</label>
                     {type==="select" ? (
@@ -346,6 +348,16 @@ export default function ManageProducts({ setPage }) {
               {form.extra_images.map((url, i) => (
                 <ImageSlot key={i} label={`IMAGE — ANGLE ${i + 2} (optional)`} value={url} onChange={(val) => setExtraImage(i, val)} inputStyle={inputStyle} />
               ))}
+
+              <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", fontSize:13, fontWeight:600, color:"#555" }}>
+                <input
+                  type="checkbox"
+                  checked={+form.stock > 0}
+                  onChange={(e) => setForm((f) => ({ ...f, stock: e.target.checked ? "1" : "0" }))}
+                  style={{ width:16, height:16, accentColor:"#be185d" }}
+                />
+                ✅ Item is available (uncheck when sold)
+              </label>
 
               <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", fontSize:13, fontWeight:600, color:"#555" }}>
                 <input type="checkbox" checked={form.featured} onChange={sf("featured")} style={{ width:16, height:16, accentColor:"#be185d" }} />

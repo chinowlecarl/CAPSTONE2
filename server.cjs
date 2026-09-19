@@ -69,6 +69,14 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: "Too many verification attempts. Please try again in 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use("/api/", apiLimiter);
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ibivuhadbvxwciiwgfgy.supabase.co";
@@ -136,7 +144,6 @@ app.post("/api/register", authLimiter, async (req, res) => {
     return res.status(400).json({ error: "Username must be 3-30 alphanumeric characters" });
 
   try {
-    // ✅ FIXED: Use maybeSingle() instead of single() to avoid error when no row found
     const { data: existingUsername } = await supabase
       .from("users").select("id").eq("username", username).maybeSingle();
     const { data: existingEmail } = await supabase
@@ -184,7 +191,6 @@ app.post("/api/login", authLimiter, async (req, res) => {
     return res.status(400).json({ error: "Username and password required" });
 
   try {
-    // ✅ FIXED: Use maybeSingle() instead of single()
     const { data: user } = await supabase.from("users").select("*")
       .or(`username.eq.${sanitize(username)},email.eq.${sanitize(username)}`)
       .eq("status", "active").maybeSingle();
@@ -243,6 +249,58 @@ app.put("/api/me", auth, async (req, res) => {
     if (error) throw error;
     res.json({ message: "Profile updated!", user: data });
   } catch (err) { res.status(500).json({ error: "Failed to update profile" }); }
+});
+
+// ============================================================
+// OTP / MFA (MOCK — no real SMS sent, code is logged to console)
+// Swap this block for a real SMS provider later if you upgrade.
+// ============================================================
+
+const otpStore = new Map(); // phone -> { code, expiresAt }
+
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
+}
+
+app.post("/api/otp/send", otpLimiter, async (req, res) => {
+  const phone = sanitize(req.body.phone);
+
+  if (!phone)
+    return res.status(400).json({ error: "Phone number required" });
+
+  const code = generateOtp();
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  otpStore.set(phone, { code, expiresAt });
+
+  // 👇 Real SMS would be sent here. For now the code is just logged.
+  console.log(`\n[MOCK OTP] ${new Date().toISOString()} - Code for ${phone}: ${code}\n`);
+
+  res.json({ message: "Verification code sent (check server console — mock mode)" });
+});
+
+app.post("/api/otp/verify", otpLimiter, async (req, res) => {
+  const phone = sanitize(req.body.phone);
+  const code  = sanitize(req.body.code);
+
+  if (!phone || !code)
+    return res.status(400).json({ error: "Phone and code required" });
+
+  const record = otpStore.get(phone);
+
+  if (!record)
+    return res.status(400).json({ error: "No code was sent to this number" });
+
+  if (Date.now() > record.expiresAt) {
+    otpStore.delete(phone);
+    return res.status(400).json({ error: "Code has expired. Please request a new one." });
+  }
+
+  if (record.code !== code)
+    return res.status(400).json({ error: "Invalid code" });
+
+  otpStore.delete(phone); // one-time use
+  console.log(`[MOCK OTP] ${new Date().toISOString()} - ${phone} verified`);
+  res.json({ message: "Verified" });
 });
 
 // ============================================================
@@ -312,7 +370,6 @@ app.post("/api/products", auth, adminOnly, async (req, res) => {
       }]).select().single();
     if (error) {
       console.error(`[ADD PRODUCT ERROR] Supabase: ${error.message} | code: ${error.code} | details: ${error.details}`);
-      // RLS policy violation — anon key blocked by Supabase Row Level Security
       if (error.code === "42501" || error.message?.includes("policy")) {
         return res.status(500).json({ error: "Database permission denied. Fix: disable RLS on 'products' table or add a service-role key." });
       }
@@ -373,7 +430,6 @@ app.post("/api/cart", auth, async (req, res) => {
   const { product_id, quantity } = req.body;
   if (!product_id) return res.status(400).json({ error: "Product ID required" });
   try {
-    // ✅ FIXED: Use maybeSingle() to avoid error when item not in cart yet
     const { data: existing } = await supabase.from("cart_items").select("*")
       .eq("user_id", req.user.id).eq("product_id", product_id).maybeSingle();
     if (existing) {
@@ -475,7 +531,6 @@ app.post("/api/orders", auth, async (req, res) => {
       }))
     );
 
-    // ✅ FIX: Decrement product stock for each item in the order
     for (const item of cart) {
       const currentStock = item.products.stock || 0;
       const newStock = Math.max(0, currentStock - item.quantity);
@@ -544,12 +599,10 @@ app.put("/api/admin/orders/:id", auth, adminOnly, async (req, res) => {
   if (!allowed.includes(status))
     return res.status(400).json({ error: "Invalid status value" });
   try {
-    // ✅ FIX: If cancelling an order, restore stock for each item
     if (status === "cancelled") {
       const { data: existingOrder } = await supabase.from("orders")
         .select("status").eq("id", req.params.id).single();
 
-      // Only restore stock if it wasn't already cancelled
       if (existingOrder && existingOrder.status !== "cancelled") {
         const { data: orderItems } = await supabase.from("order_items")
           .select("product_id, quantity, products(stock)")

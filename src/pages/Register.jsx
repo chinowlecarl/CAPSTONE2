@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useApp } from "../context/AppContext";
 
 export default function Register({ setPage }) {
-  const { registerUser } = useApp();
-  const [form, setForm] = useState({ username: "", email: "", password: "", confirm: "" });
+  const { registerUser, completeRegister } = useApp();
+  const [form, setForm] = useState({ username: "", email: "", phone: "", password: "", confirm: "" });
   const [errors, setErrors] = useState([]);
   const [loading, setLoading] = useState(false);
   const sf = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -19,13 +19,15 @@ export default function Register({ setPage }) {
     const errs = [];
     if (form.username.length < 3) errs.push("Username must be at least 3 characters");
     if (!form.email.includes("@")) errs.push("Valid email is required");
+    if (!/^[0-9]{10,15}$/.test(form.phone.replace(/\s/g, ""))) errs.push("Valid phone number is required");
     if (!pwReqs.every((r) => r.ok)) errs.push("Password does not meet requirements");
     if (form.password !== form.confirm) errs.push("Passwords do not match");
     setErrors(errs);
     if (errs.length > 0) return;
     setLoading(true);
     try {
-      await registerUser(form);
+      const data = await registerUser(form);
+      completeRegister(data);
       setPage("home");
     } catch (err) {
       setErrors([err.message]);
@@ -63,7 +65,7 @@ export default function Register({ setPage }) {
           ))}
         </div>
 
-        {[["EMAIL", "email", "email"], ["USERNAME", "username", "text"], ["PASSWORD", "password", "password"], ["CONFIRM PASSWORD", "confirm", "password"]].map(([label, key, type]) => (
+        {[["EMAIL", "email", "email"], ["USERNAME", "username", "text"], ["PHONE NUMBER", "phone", "tel"], ["PASSWORD", "password", "password"], ["CONFIRM PASSWORD", "confirm", "password"]].map(([label, key, type]) => (
           <div key={key} style={{ marginBottom: 14 }}>
             <label style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#888", letterSpacing: 1.5, marginBottom: 6 }}>{label}</label>
             <input
