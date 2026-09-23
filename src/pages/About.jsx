@@ -31,7 +31,7 @@ export default function About() {
         </div>
 
         <div style={{ background: "#be185d", borderRadius: 20, padding: "40px 32px", color: "#fff", margin: "40px 0", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, textAlign: "center" }}>
-          {[["10,000+", "Happy Customers"], ["500+", "Products"], ["50+", "Brands"], ["24/7", "Support"]].map(([n, l]) => (
+          {[["300+", "Happy Customers"], ["500+", "Products"], ["50+", "Brands"], ["24/7", "Support"]].map(([n, l]) => (
             <div key={l}>
               <div style={{ fontSize: 28, fontWeight: 900, color: "#fce7f3", marginBottom: 4 }}>{n}</div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>{l}</div>

@@ -3,11 +3,11 @@ import { useApp } from "../context/AppContext";
 import { apiFetch, fmt, salePrice } from "../utils/api";
 
 const STATUS_STYLES = {
-  pending:   { bg: "#fef9c3", color: "#854d0e", label: "⏳ Pending" },
-  confirmed: { bg: "#dbeafe", color: "#1e40af", label: "✅ Confirmed" },
-  shipped:   { bg: "#ede9fe", color: "#6d28d9", label: "🚚 Shipped" },
-  delivered: { bg: "#dcfce7", color: "#166534", label: "📦 Delivered" },
-  cancelled: { bg: "#fee2e2", color: "#991b1b", label: "❌ Cancelled" },
+  pending:   { bg: "#fef9c3", color: "#854d0e", label: "Pending" },
+  confirmed: { bg: "#dbeafe", color: "#1e40af", label: "Confirmed" },
+  shipped:   { bg: "#ede9fe", color: "#6d28d9", label: "Shipped" },
+  delivered: { bg: "#dcfce7", color: "#166534", label: "Delivered" },
+  cancelled: { bg: "#fee2e2", color: "#991b1b", label: "Cancelled" },
 };
 
 function StatusBadge({ status }) {
