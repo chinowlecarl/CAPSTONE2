@@ -1,7 +1,13 @@
+import { supabase } from "./supabase";
+
 const API = "http://localhost:5000/api";
 
 export async function apiFetch(path, options = {}) {
-  const token = localStorage.getItem("fitcheque_token");
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
   const res = await fetch(`${API}${path}`, {
     headers: {
       "Content-Type": "application/json",
@@ -11,12 +17,7 @@ export async function apiFetch(path, options = {}) {
   });
   const data = await res.json();
   if (!res.ok) {
-    // If token is expired/invalid, clear stored credentials so the user
-    // is sent back to the login page on the next protected action.
     if (res.status === 401) {
-      localStorage.removeItem("fitcheque_token");
-      localStorage.removeItem("fitcheque_user");
-      // Dispatch a custom event so AppContext can react without a circular import
       window.dispatchEvent(new Event("fitcheque:unauthorized"));
     }
     throw new Error(data.error || "Something went wrong");

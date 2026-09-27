@@ -5,7 +5,7 @@ import { useApp } from "../context/AppContext";
  
 export function Main({ page, setPage, children }) {
   const { toasts } = useApp();
-  const noNav    = ["login", "signup"].includes(page);
+  const noNav    = ["login", "signup", "admin"].includes(page);
   const noFooter = ["login", "signup", "admin", "checkout"].includes(page);
  
   return (

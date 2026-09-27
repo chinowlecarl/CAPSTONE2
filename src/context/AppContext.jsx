@@ -1,14 +1,14 @@
-import { createContext, useContext, useState, useEffect } from "react";
+
 import { apiFetch } from "../utils/api";
+import { supabase } from "../utils/supabase";
+import { createContext, useContext, useState, useEffect, useRef } from "react";
 
 export const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
 
 export function AppProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("fitcheque_user")); }
-    catch { return null; }
-  });
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [cart, setCart] = useState([]);
   const [toasts, setToasts] = useState([]);
 
@@ -18,15 +18,55 @@ export function AppProvider({ children }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   };
 
-  // Auto-logout when any API call receives a 401 (expired/invalid token)
-  useEffect(() => {
-    const handle = () => {
+  // Build our app's "user" shape from a Supabase session + profiles row
+   const pendingChallengeRef = useRef(false); // suppresses auto user-load during MFA/OTP step
+
+
+  const loadProfileForSession = async (session) => {
+    if (!session?.user) {
       setUser(null);
-      setCart([]);
-      toast("Your session has expired. Please sign in again.", "error");
-    };
-    window.addEventListener("fitcheque:unauthorized", handle);
-    return () => window.removeEventListener("fitcheque:unauthorized", handle);
+      return;
+    }
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("id, fullname, username, phone, address, role, status")
+      .eq("id", session.user.id)
+      .single();
+
+    if (error || !profile) {
+      console.error("Failed to load profile:", error?.message);
+      setUser(null);
+      return;
+    }
+
+    setUser({
+      id: profile.id,
+      fullname: profile.fullname,
+      username: profile.username,
+      email: session.user.email,
+      phone: profile.phone,
+      address: profile.address,
+      role: profile.role,
+      status: profile.status,
+    });
+  };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!pendingChallengeRef.current) {
+        loadProfileForSession(session).finally(() => setAuthLoading(false));
+      } else {
+        setAuthLoading(false);
+      }
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (pendingChallengeRef.current) return; // ignore session changes mid-challenge
+      loadProfileForSession(session);
+      if (event === "SIGNED_OUT") setCart([]);
+    });
+
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -37,56 +77,131 @@ export function AppProvider({ children }) {
     }
   }, [user?.id]);
 
-  const login = async (username, password) => {
-    const data = await apiFetch("/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
+  // ── AUTH ──────────────────────────────────────────────────
+
+  // Step 1: password check + branch to the right second factor.
+  // Returns one of:
+  //   { status: "ok" }
+  //   { status: "totp_required", factorId }
+  //   { status: "email_otp_required", email }
+  const login = async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(error.message);
+
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", data.user.id)
+      .single();
+    if (profileErr || !profile) throw new Error("Could not load account role");
+
+    if (profile.role === "admin") {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+        pendingChallengeRef.current = true;
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const totp = factors?.totp?.find((f) => f.status === "verified");
+        if (!totp) {
+          pendingChallengeRef.current = false;
+          return { status: "ok" }; // admin has no factor enrolled yet — let through, nag elsewhere
+        }
+        return { status: "totp_required", factorId: totp.id };
+      }
+      return { status: "ok" };
+    }
+
+    // Customer: sign back out, force an emailed code before granting access
+    pendingChallengeRef.current = true;
+    await supabase.auth.signOut();
+    const { error: otpErr } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
     });
-    // Don't commit the session yet — wait for OTP verification
-    return data; // { token, user }
+    if (otpErr) {
+      pendingChallengeRef.current = false;
+      throw new Error(otpErr.message);
+    }
+    return { status: "email_otp_required", email };
   };
 
-  const completeLogin = (data) => {
-    localStorage.setItem("fitcheque_token", data.token);
-    localStorage.setItem("fitcheque_user", JSON.stringify(data.user));
-    setUser(data.user);
-    toast(`Welcome back, ${data.user.fullname}! 🌸`, "success");
+  const verifyTotpChallenge = async (factorId, code) => {
+    const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId });
+    if (challengeErr) throw new Error(challengeErr.message);
+
+    const { error: verifyErr } = await supabase.auth.mfa.verify({
+      factorId,
+      challengeId: challenge.id,
+      code,
+    });
+    if (verifyErr) throw new Error(verifyErr.message);
+
+    pendingChallengeRef.current = false;
+    const { data: { session } } = await supabase.auth.getSession();
+    await loadProfileForSession(session);
+    toast(`Welcome back! 🌸`, "success");
   };
 
-  const logout = () => {
-    localStorage.removeItem("fitcheque_token");
-    localStorage.removeItem("fitcheque_user");
+  const verifyEmailOtpChallenge = async (email, code) => {
+    const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
+    if (error) throw new Error(error.message);
+
+    pendingChallengeRef.current = false;
+    await loadProfileForSession(data.session);
+    toast(`Welcome back! 🌸`, "success");
+  };
+
+  const cancelChallenge = async () => {
+    pendingChallengeRef.current = false;
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  const completeLogin = () => {}; // kept for compatibility, no-op now (handled in verify* above)
+
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     setCart([]);
     toast("Logged out successfully.", "info");
   };
 
   const registerUser = async (form) => {
-    const data = await apiFetch("/register", {
-      method: "POST",
-      body: JSON.stringify(form),
+    const { data, error } = await supabase.auth.signUp({
+      email: form.email,
+      password: form.password,
+      options: {
+        data: {
+          fullname: form.fullname || form.username,
+          username: form.username,
+          phone: form.phone,
+          address: form.address,
+        },
+      },
     });
-    // Don't commit the session yet — wait for OTP verification
-    return data; // { token, user }
+    if (error) throw new Error(error.message);
+    return data;
   };
 
-  const completeRegister = (data) => {
-    localStorage.setItem("fitcheque_token", data.token);
-    localStorage.setItem("fitcheque_user", JSON.stringify(data.user));
-    setUser(data.user);
-    toast(`Welcome to FITCHEQUE, ${data.user.username}! 🌸`, "success");
+  const completeRegister = () => {
+    toast(`Welcome to FITCHEQUE! 🌸`, "success");
   };
 
   const updateProfile = async (form) => {
-    const data = await apiFetch("/me", {
-      method: "PUT",
-      body: JSON.stringify(form),
-    });
-    const updated = { ...user, ...data.user };
-    localStorage.setItem("fitcheque_user", JSON.stringify(updated));
-    setUser(updated);
+    if (!user) return;
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        fullname: form.fullname,
+        phone: form.phone,
+        address: form.address,
+      })
+      .eq("id", user.id);
+    if (error) throw new Error(error.message);
+    setUser((u) => ({ ...u, ...form }));
     toast("Profile updated! ✨", "success");
   };
+
+  // ── CART (unchanged — still via Express) ───────────────────
 
   const addToCart = async (product) => {
     if (user) {
@@ -149,11 +264,8 @@ export function AppProvider({ children }) {
       );
     }
   };
-
-  // Clear cart after a successful order — refresh from server if logged in
-  // (in case the backend already emptied it), otherwise just clear local state.
   const clearCart = async () => {
-    if (user) {
+    if (user) { 
       try {
         const updated = await apiFetch("/cart");
         setCart(updated);
@@ -165,12 +277,18 @@ export function AppProvider({ children }) {
     }
   };
 
-  const ctx = {
-    user, cart, toasts,
+
+  
+
+    const ctx = {
+    user, authLoading, cart, toasts,
     login, logout, registerUser, completeLogin, completeRegister, updateProfile,
+    verifyTotpChallenge, verifyEmailOtpChallenge, cancelChallenge,
     addToCart, removeFromCart, updateQty, clearCart,
     toast,
   };
+
+
 
   return <AppContext.Provider value={ctx}>{children}</AppContext.Provider>;
 }

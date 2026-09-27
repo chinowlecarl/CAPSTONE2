@@ -91,16 +91,43 @@ function sanitize(str) {
   return str.trim().replace(/[<>"'`;]/g, "");
 }
 
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const header = req.headers.authorization;
   if (!header || !header.startsWith("Bearer "))
     return res.status(401).json({ error: "No token provided" });
   const token = header.split(" ")[1];
+
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    const {
+      data: { user: authUser },
+      error,
+    } = await supabase.auth.getUser(token);
+    if (error || !authUser)
+      return res.status(401).json({ error: "Invalid or expired token" });
+
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("id, username, role, status")
+      .eq("id", authUser.id)
+      .single();
+
+    if (profileErr || !profile)
+      return res
+        .status(401)
+        .json({ error: "Profile not found for this account" });
+
+    if (profile.status === "suspended")
+      return res.status(403).json({ error: "This account has been suspended" });
+
+    req.user = {
+      id: authUser.id,
+      username: profile.username,
+      role: profile.role,
+      email: authUser.email,
+    };
     next();
   } catch (err) {
-    console.warn(`[AUTH FAIL] ${new Date().toISOString()} - Invalid token: ${err.message}`);
+    console.warn(`[AUTH FAIL] ${new Date().toISOString()} - ${err.message}`);
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 }
@@ -228,12 +255,39 @@ app.post("/api/login", authLimiter, async (req, res) => {
 
 app.get("/api/me", auth, async (req, res) => {
   try {
-    const { data, error } = await supabase.from("users")
-      .select("id,fullname,username,email,phone,address,role,status,created_at")
-      .eq("id", req.user.id).single();
-    if (error || !data) return res.status(404).json({ error: "User not found" });
-    res.json(data);
-  } catch (err) { res.status(500).json({ error: "Failed to fetch profile" }); }
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id,fullname,username,phone,address,role,status,created_at")
+      .eq("id", req.user.id)
+      .single();
+    if (error || !data)
+      return res.status(404).json({ error: "User not found" });
+    res.json({ ...data, email: req.user.email });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch profile" });
+  }
+});
+
+app.put("/api/me", auth, async (req, res) => {
+  let { fullname, phone, address } = req.body;
+  fullname = sanitize(fullname);
+  phone = sanitize(phone);
+  address = sanitize(address);
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({ fullname, phone, address })
+      .eq("id", req.user.id)
+      .select("id,fullname,username,phone,address,role,status")
+      .single();
+    if (error) throw error;
+    res.json({
+      message: "Profile updated!",
+      user: { ...data, email: req.user.email },
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update profile" });
+  }
 });
 
 app.put("/api/me", auth, async (req, res) => {
@@ -607,46 +661,66 @@ app.put("/api/orders/:id", auth, async (req, res) => {
   }
 });
 
+
+
+
+
+
+
 // ============================================================
 // ADMIN
 // ============================================================
 
 app.get("/api/admin/users", auth, adminOnly, async (req, res) => {
   try {
-    const { data, error } = await supabase.from("users")
-      .select("id,fullname,username,email,phone,address,role,status,created_at")
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id,fullname,username,phone,address,role,status,created_at")
       .order("created_at", { ascending: false });
     if (error) throw error;
     res.json(data);
-  } catch (err) { res.status(500).json({ error: "Failed to fetch users" }); }
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
 });
 
 app.get("/api/admin/stats", auth, adminOnly, async (req, res) => {
   try {
     const [p, u, o, ls] = await Promise.all([
       supabase.from("products").select("id", { count: "exact" }),
-      supabase.from("users").select("id", { count: "exact" }).eq("role", "customer"),
+      supabase
+        .from("profiles")
+        .select("id", { count: "exact" })
+        .eq("role", "customer"),
       supabase.from("orders").select("id,total_amount", { count: "exact" }),
       supabase.from("products").select("id", { count: "exact" }).lt("stock", 5),
     ]);
     res.json({
-      total_products:  p.count  || 0,
-      total_customers: u.count  || 0,
-      total_orders:    o.count  || 0,
-      total_revenue:   o.data?.reduce((s, x) => s + Number(x.total_amount), 0) || 0,
-      low_stock:       ls.count || 0,
+      total_products: p.count || 0,
+      total_customers: u.count || 0,
+      total_orders: o.count || 0,
+      total_revenue:
+        o.data?.reduce((s, x) => s + Number(x.total_amount), 0) || 0,
+      low_stock: ls.count || 0,
     });
-  } catch (err) { res.status(500).json({ error: "Failed to fetch stats" }); }
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
 });
 
 app.get("/api/admin/orders", auth, adminOnly, async (req, res) => {
   try {
-    const { data, error } = await supabase.from("orders")
-      .select("*, users(id,fullname,email,username), order_items(*, products(title))")
+    const { data, error } = await supabase
+      .from("orders")
+      .select(
+        "*, profiles(id,fullname,username), order_items(*, products(title))",
+      )
       .order("created_at", { ascending: false });
     if (error) throw error;
     res.json(data);
-  } catch (err) { res.status(500).json({ error: "Failed to fetch orders" }); }
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch orders" });
+  }
 });
 
 app.put("/api/admin/orders/:id", auth, adminOnly, async (req, res) => {
@@ -685,15 +759,164 @@ app.put("/api/admin/orders/:id", auth, adminOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Failed to update order status" }); }
 });
 
+// ============================================================
+// PAYMENTS (manual GCash/Maya proof + admin verification)
+// ============================================================
+
+// Customer submits payment method + reference + proof screenshot
+// Expects: { payment_method: "GCASH"|"MAYA", payment_reference: string, proof_base64: "data:image/...;base64,...." }
+app.put("/api/orders/:id/payment", auth, async (req, res) => {
+  const { payment_method, payment_reference, proof_base64 } = req.body;
+
+  if (!["GCASH", "MAYA"].includes(payment_method))
+    return res.status(400).json({ error: "payment_method must be GCASH or MAYA" });
+
+  const reference = sanitize(payment_reference);
+  if (!reference)
+    return res.status(400).json({ error: "Payment reference is required" });
+
+  if (!proof_base64 || !proof_base64.startsWith("data:image/"))
+    return res.status(400).json({ error: "A valid payment proof image is required" });
+
+  try {
+    // Confirm the order exists, belongs to this user, and is in a state that accepts payment
+    const { data: order, error: findErr } = await supabase
+      .from("orders")
+      .select("id, user_id, payment_status")
+      .eq("id", req.params.id)
+      .eq("user_id", req.user.id)
+      .single();
+
+    if (findErr || !order)
+      return res.status(404).json({ error: "Order not found" });
+
+    if (!["PENDING", "REJECTED"].includes(order.payment_status))
+      return res.status(400).json({ error: "This order is not awaiting payment" });
+
+    // Parse the data URI: "data:image/jpeg;base64,AAAA..."
+    const match = proof_base64.match(/^data:(image\/\w+);base64,(.+)$/);
+    if (!match)
+      return res.status(400).json({ error: "Invalid image data" });
+
+    const mimeType = match[1];
+    const ext = mimeType.split("/")[1] || "jpg";
+    const buffer = Buffer.from(match[2], "base64");
+
+    if (buffer.length > 8 * 1024 * 1024)
+      return res.status(400).json({ error: "Image too large (max 8MB)" });
+
+    const storagePath = `${req.user.id}/${order.id}/${Date.now()}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("payment-proofs")
+      .upload(storagePath, buffer, { contentType: mimeType, upsert: true });
+
+    if (uploadErr) throw uploadErr;
+
+    const { data: updated, error: updateErr } = await supabase
+      .from("orders")
+      .update({
+        payment_method: payment_method,
+        payment_reference: reference,
+        payment_proof_url: storagePath,
+        payment_status: "PENDING_VERIFICATION",
+      })
+      .eq("id", order.id)
+      .eq("user_id", req.user.id)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    console.log(`[PAYMENT SUBMITTED] ${new Date().toISOString()} - Order ${order.id} by user ${req.user.id}`);
+    res.json({ message: "Payment proof submitted! Waiting for admin verification.", order: updated });
+  } catch (err) {
+    console.error(`[PAYMENT SUBMIT ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to submit payment proof" });
+  }
+});
+
+// Admin: list orders awaiting payment verification
+app.get("/api/admin/payments/pending", auth, adminOnly, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*, users(id, fullname, email, username)")
+      .eq("payment_status", "PENDING_VERIFICATION")
+      .order("updated_at", { ascending: true });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch pending payments" });
+  }
+});
+
+// Admin: get a short-lived signed URL to view a specific order's proof image
+app.get("/api/admin/orders/:id/payment-proof", auth, adminOnly, async (req, res) => {
+  try {
+    const { data: order, error: findErr } = await supabase
+      .from("orders").select("payment_proof_url").eq("id", req.params.id).single();
+    if (findErr || !order?.payment_proof_url)
+      return res.status(404).json({ error: "No payment proof on this order" });
+
+    const { data, error } = await supabase.storage
+      .from("payment-proofs")
+      .createSignedUrl(order.payment_proof_url, 300); // 5 minutes
+    if (error) throw error;
+
+    res.json({ url: data.signedUrl });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load payment proof" });
+  }
+});
+
+// Admin: approve or reject a pending payment
+app.put("/api/admin/orders/:id/verify-payment", auth, adminOnly, async (req, res) => {
+  const { decision } = req.body; // "approve" | "reject"
+  if (!["approve", "reject"].includes(decision))
+    return res.status(400).json({ error: "decision must be 'approve' or 'reject'" });
+
+  try {
+    const { data: order, error: findErr } = await supabase
+      .from("orders").select("id, payment_status").eq("id", req.params.id).single();
+    if (findErr || !order)
+      return res.status(404).json({ error: "Order not found" });
+
+    if (order.payment_status !== "PENDING_VERIFICATION")
+      return res.status(400).json({ error: "This order is not awaiting verification" });
+
+    const newStatus = decision === "approve" ? "PAID" : "REJECTED";
+
+    const { data: updated, error: updateErr } = await supabase
+      .from("orders")
+      .update({ payment_status: newStatus })
+      .eq("id", req.params.id)
+      .select()
+      .single();
+    if (updateErr) throw updateErr;
+
+    console.log(`[PAYMENT ${newStatus}] ${new Date().toISOString()} - Order ${req.params.id} by admin ${req.user.id}`);
+    res.json({ message: `Payment ${newStatus}!`, order: updated });
+    // NOTE: Lalamove booking trigger gets added here in Phase 4, only when newStatus === "PAID"
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update payment status" });
+  }
+});
+
+
+
 app.get("/api/admin/users/:id/orders", auth, adminOnly, async (req, res) => {
   try {
-    const { data, error } = await supabase.from("orders")
+    const { data, error } = await supabase
+      .from("orders")
       .select("*, order_items(*, products(title))")
       .eq("user_id", req.params.id)
       .order("created_at", { ascending: false });
     if (error) throw error;
     res.json(data);
-  } catch (err) { res.status(500).json({ error: "Failed to fetch user orders" }); }
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch user orders" });
+  }
 });
 
 app.put("/api/admin/users/:id/status", auth, adminOnly, async (req, res) => {
@@ -701,13 +924,20 @@ app.put("/api/admin/users/:id/status", auth, adminOnly, async (req, res) => {
   if (!["active", "suspended"].includes(status))
     return res.status(400).json({ error: "Invalid status value" });
   try {
-    const { data, error } = await supabase.from("users")
-      .update({ status }).eq("id", req.params.id)
-      .select("id,fullname,username,email,role,status").single();
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({ status })
+      .eq("id", req.params.id)
+      .select("id,fullname,username,role,status")
+      .single();
     if (error) throw error;
-    console.log(`[ADMIN] ${new Date().toISOString()} - User ${req.params.id} status → ${status}`);
+    console.log(
+      `[ADMIN] ${new Date().toISOString()} - User ${req.params.id} status → ${status}`,
+    );
     res.json({ message: "User status updated!", user: data });
-  } catch (err) { res.status(500).json({ error: "Failed to update user status" }); }
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update user status" });
+  }
 });
 
 app.use((req, res) => {

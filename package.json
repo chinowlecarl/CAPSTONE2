@@ -7,6 +7,9 @@
     "start": "node server.cjs",
     "dev": "nodemon server.cjs"
   },
+  "overrides": {
+  "qs": "^6.16.0"
+},
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
     "bcryptjs": "^2.4.3",
@@ -18,8 +21,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "twilio": "^6.1.1"
+    "react-dom": "^19.2.5"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.1",

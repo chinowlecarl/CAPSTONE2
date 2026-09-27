@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { apiFetch, fmt, salePrice } from "../utils/api";
+import { supabase } from "../utils/supabase";
 
 const STATUS_STYLES = {
   pending:   { bg: "#fef9c3", color: "#854d0e", label: "Pending" },
@@ -154,6 +155,179 @@ function OrderCard({ order, onCancel, cancelling }) {
   );
 }
 
+function SecurityTab({ toast }) {
+  const [factors, setFactors]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [enrolling, setEnrolling] = useState(false);
+  const [factorId, setFactorId]   = useState(null);
+  const [qrCode, setQrCode]       = useState(null);
+  const [secret, setSecret]       = useState(null);
+  const [code, setCode]           = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [unenrolling, setUnenrolling] = useState(null);
+
+  const loadFactors = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.auth.mfa.listFactors();
+    if (!error) setFactors(data?.totp || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadFactors(); }, []);
+
+  const startEnroll = async () => {
+    setEnrolling(true);
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+    if (error) {
+      toast(error.message, "error");
+      setEnrolling(false);
+      return;
+    }
+    setFactorId(data.id);
+    setQrCode(data.totp.qr_code);
+    setSecret(data.totp.secret);
+  };
+
+  const confirmEnroll = async () => {
+    if (!code || code.length !== 6) {
+      toast("Enter the 6-digit code from your authenticator app", "error");
+      return;
+    }
+    setVerifying(true);
+    try {
+      const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId });
+      if (challengeErr) throw challengeErr;
+
+      const { error: verifyErr } = await supabase.auth.mfa.verify({
+        factorId,
+        challengeId: challenge.id,
+        code,
+      });
+      if (verifyErr) throw verifyErr;
+
+      toast("Two-factor authentication enabled! 🔐", "success");
+      setEnrolling(false);
+      setQrCode(null);
+      setSecret(null);
+      setCode("");
+      setFactorId(null);
+      await loadFactors();
+    } catch (err) {
+      toast(err.message || "Invalid code, please try again", "error");
+    }
+    setVerifying(false);
+  };
+
+  const cancelEnroll = async () => {
+    if (factorId) {
+      await supabase.auth.mfa.unenroll({ factorId });
+    }
+    setEnrolling(false);
+    setQrCode(null);
+    setSecret(null);
+    setCode("");
+    setFactorId(null);
+  };
+
+  const removeFactor = async (id) => {
+    if (!window.confirm("Disable two-factor authentication? This will remove admin AAL2 protection.")) return;
+    setUnenrolling(id);
+    const { error } = await supabase.auth.mfa.unenroll({ factorId: id });
+    if (error) toast(error.message, "error");
+    else { toast("Two-factor authentication disabled.", "info"); await loadFactors(); }
+    setUnenrolling(null);
+  };
+
+  const verifiedFactor = factors.find((f) => f.status === "verified");
+
+  if (loading) return (
+    <div style={{ textAlign: "center", padding: "60px 24px" }}>
+      <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
+      <p style={{ color: "#be185d", fontWeight: 600 }}>Loading security settings...</p>
+    </div>
+  );
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #fce7f3", boxShadow: "0 2px 16px rgba(190,24,93,0.06)", padding: 24 }}>
+      <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 900, color: "#1a1a1a", margin: "0 0 6px" }}>
+        Two-Factor Authentication
+      </h3>
+      <p style={{ color: "#888", fontSize: 13, margin: "0 0 20px" }}>
+        Adds an extra security step using an authenticator app (Google Authenticator, Authy, etc).
+      </p>
+
+      {/* Already enrolled */}
+      {verifiedFactor && !enrolling && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 12, padding: "14px 18px", marginBottom: 16 }}>
+            <span style={{ fontSize: 22 }}>✅</span>
+            <div>
+              <p style={{ margin: 0, fontWeight: 700, color: "#166534", fontSize: 13 }}>Two-factor authentication is enabled</p>
+              <p style={{ margin: 0, color: "#16a34a", fontSize: 12 }}>Your account is protected with an authenticator app.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => removeFactor(verifiedFactor.id)}
+            disabled={unenrolling === verifiedFactor.id}
+            style={{ background: "#fff", border: "1.5px solid #fecaca", color: "#ef4444", fontWeight: 700, fontSize: 12, padding: "10px 20px", borderRadius: 10, cursor: "pointer" }}
+          >
+            {unenrolling === verifiedFactor.id ? "REMOVING..." : "DISABLE 2FA"}
+          </button>
+        </div>
+      )}
+
+      {/* Not enrolled, not currently enrolling */}
+      {!verifiedFactor && !enrolling && (
+        <button
+          onClick={startEnroll}
+          style={{ background: "linear-gradient(135deg, #f9a8d4, #be185d)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, padding: "12px 28px", cursor: "pointer" }}
+        >
+          ENABLE TWO-FACTOR AUTHENTICATION
+        </button>
+      )}
+
+      {/* Enrollment in progress — QR + code entry */}
+      {enrolling && qrCode && (
+        <div>
+          <p style={{ fontSize: 12, fontWeight: 700, color: "#be185d", marginBottom: 10 }}>
+            1. Scan this QR code with Google Authenticator, Authy, or similar
+          </p>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+            <img src={qrCode} alt="TOTP QR code" style={{ width: 200, height: 200, border: "1px solid #fce7f3", borderRadius: 12, padding: 8, background: "#fff" }} />
+          </div>
+
+          {secret && (
+            <p style={{ fontSize: 11, color: "#aaa", textAlign: "center", marginBottom: 20, wordBreak: "break-all" }}>
+              Can't scan? Enter this code manually: <br />
+              <span style={{ fontFamily: "monospace", color: "#be185d", fontWeight: 700 }}>{secret}</span>
+            </p>
+          )}
+
+          <p style={{ fontSize: 12, fontWeight: 700, color: "#be185d", marginBottom: 10 }}>
+            2. Enter the 6-digit code from the app
+          </p>
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="000000"
+            maxLength={6}
+            style={{ width: "100%", padding: "12px 14px", border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 18, letterSpacing: 6, textAlign: "center", outline: "none", background: "#fff5f7", boxSizing: "border-box", marginBottom: 16, fontFamily: "monospace" }}
+          />
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={cancelEnroll} style={{ flex: 1, background: "#fff", border: "1.5px solid #fce7f3", borderRadius: 10, color: "#be185d", fontWeight: 700, fontSize: 13, padding: "12px 0", cursor: "pointer" }}>
+              CANCEL
+            </button>
+            <button onClick={confirmEnroll} disabled={verifying} style={{ flex: 2, background: "linear-gradient(135deg, #f9a8d4, #be185d)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, padding: "12px 0", cursor: "pointer", opacity: verifying ? 0.7 : 1 }}>
+              {verifying ? "VERIFYING..." : "CONFIRM & ENABLE"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Profile({ setPage }) {
   const { user, logout, updateProfile, toast } = useApp();
 
@@ -247,6 +421,7 @@ export default function Profile({ setPage }) {
         {/* Tabs */}
         <div style={{ display: "flex", background: "#fff", borderRadius: 12, border: "1px solid #fce7f3", marginBottom: 20, overflow: "hidden" }}>
           <button style={tabStyle("profile")} onClick={() => setActiveTab("profile")}>👤 Profile</button>
+          <button style={tabStyle("security")} onClick={() => setActiveTab("security")}>🔐 Security</button>
           <button style={tabStyle("orders")}  onClick={() => setActiveTab("orders")}>📦 My Orders</button>
         </div>
 
@@ -345,6 +520,8 @@ export default function Profile({ setPage }) {
         )}
 
       </div>
+      {/* ── SECURITY TAB ── */}
+{activeTab === "security" && <SecurityTab toast={toast} />}
     </div>
   );
 }

@@ -15,7 +15,9 @@ export default function Register({ setPage }) {
     { ok: /[0-9]/.test(pw), label: "One number" },
   ];
 
-  const handleSubmit = async () => {
+  const [registered, setRegistered] = useState(false);
+
+const handleSubmit = async () => {
     const errs = [];
     if (form.username.length < 3) errs.push("Username must be at least 3 characters");
     if (!form.email.includes("@")) errs.push("Valid email is required");
@@ -26,14 +28,30 @@ export default function Register({ setPage }) {
     if (errs.length > 0) return;
     setLoading(true);
     try {
-      const data = await registerUser(form);
-      completeRegister(data);
-      setPage("home");
+      await registerUser(form);
+      setRegistered(true);
     } catch (err) {
       setErrors([err.message]);
     }
     setLoading(false);
   };
+
+  if (registered) return (
+  <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, position: "relative", overflow: "hidden" }}>
+    <div style={{ position: "absolute", inset: 0, backgroundImage: "url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&q=70')", backgroundSize: "cover", backgroundPosition: "center", zIndex: 0 }} />
+    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(252,231,243,0.88) 0%, rgba(251,207,232,0.88) 40%, rgba(249,168,212,0.88) 100%)", zIndex: 1 }} />
+    <div style={{ position: "relative", zIndex: 2, width: "100%", maxWidth: 420, background: "#fff", borderRadius: 20, boxShadow: "0 20px 60px rgba(190, 24, 93, 0.3)", padding: "48px 40px", textAlign: "center" }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
+      <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: "#1a1a1a", margin: "0 0 8px" }}>Check your email</h2>
+      <p style={{ color: "#888", fontSize: 13, marginBottom: 24 }}>
+        We sent a confirmation link to <strong>{form.email}</strong>. Click it to activate your account, then come back and log in.
+      </p>
+      <button onClick={() => setPage("login")} style={{ background: "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, letterSpacing: 1.5, padding: "13px 0", cursor: "pointer", width: "100%" }}>
+        GO TO LOGIN
+      </button>
+    </div>
+  </div>
+);
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px", position: "relative", overflow: "hidden" }}>
