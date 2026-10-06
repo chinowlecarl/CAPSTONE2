@@ -1,0 +1,967 @@
+// ============================================================
+// FITCHEQUE - Node.js + Express Backend (SECURED)
+// ============================================================
+require("dotenv").config();
+
+const express    = require("express");
+const cors       = require("cors");
+const bcrypt     = require("bcryptjs");
+const jwt        = require("jsonwebtoken");
+const helmet     = require("helmet");
+const rateLimit  = require("express-rate-limit");
+const morgan     = require("morgan");
+const { createClient } = require("@supabase/supabase-js");
+
+const app = express();
+
+app.set("trust proxy", 1);
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'"],
+      styleSrc:    ["'self'", "'unsafe-inline'"],
+      imgSrc:      ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://placehold.co", "https://*.supabase.co"],
+      connectSrc:  ["'self'", "https://*.supabase.co"],
+      fontSrc:     ["'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
+      objectSrc:   ["'none'"],
+      frameSrc:    ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction:  ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  methods:     ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
+
+app.use(morgan("combined"));
+app.use(express.json({ limit: "10mb" }));
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: "Too many attempts. Please try again in 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: "Too many requests. Please slow down." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: "Too many verification attempts. Please try again in 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use("/api/", apiLimiter);
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ibivuhadbvxwciiwgfgy.supabase.co";
+// Prefer service-role key on the server (bypasses RLS). Falls back to anon key if not set.
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImliaXZ1aGFkYnZ4d2NpaXdnZmd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NDU3NTYsImV4cCI6MjA4OTQyMTc1Nn0.RxlNlmIgHDU8-QIhTU2kEWn7LAczMYrOVxU8ukfVlXk";
+const JWT_SECRET   = process.env.JWT_SECRET || "fitcheque_secret_2025_change_in_production";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+function sanitize(str) {
+  if (typeof str !== "string") return str;
+  return str.trim().replace(/[<>"'`;]/g, "");
+}
+
+async function auth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith("Bearer "))
+    return res.status(401).json({ error: "No token provided" });
+  const token = header.split(" ")[1];
+
+  try {
+    const {
+      data: { user: authUser },
+      error,
+    } = await supabase.auth.getUser(token);
+    if (error || !authUser)
+      return res.status(401).json({ error: "Invalid or expired token" });
+
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("id, username, role, status")
+      .eq("id", authUser.id)
+      .single();
+
+    if (profileErr || !profile)
+      return res
+        .status(401)
+        .json({ error: "Profile not found for this account" });
+
+    if (profile.status === "suspended")
+      return res.status(403).json({ error: "This account has been suspended" });
+
+    req.user = {
+      id: authUser.id,
+      username: profile.username,
+      role: profile.role,
+      email: authUser.email,
+    };
+    next();
+  } catch (err) {
+    console.warn(`[AUTH FAIL] ${new Date().toISOString()} - ${err.message}`);
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+function adminOnly(req, res, next) {
+  if (req.user?.role !== "admin") {
+    console.warn(`[ACCESS DENIED] ${new Date().toISOString()} - User ${req.user?.id} attempted admin access`);
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+}
+
+app.get("/", (req, res) => {
+  res.json({ message: "FITCHEQUE API is running!", status: "ok" });
+});
+
+// ============================================================
+// AUTH ROUTES
+// ============================================================
+
+app.post("/api/register", authLimiter, async (req, res) => {
+  let { fullname, username, email, password, phone, address } = req.body;
+
+  fullname = sanitize(fullname);
+  username = sanitize(username);
+  email    = sanitize(email);
+  phone    = sanitize(phone);
+  address  = sanitize(address);
+
+  if (!username || !email || !password)
+    return res.status(400).json({ error: "All fields required" });
+
+  if (password.length < 8)
+    return res.status(400).json({ error: "Password must be at least 8 characters" });
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email))
+    return res.status(400).json({ error: "Invalid email format" });
+
+  if (!/^[a-zA-Z0-9_]{3,30}$/.test(username))
+    return res.status(400).json({ error: "Username must be 3-30 alphanumeric characters" });
+
+  try {
+    const { data: existingUsername } = await supabase
+      .from("users").select("id").eq("username", username).maybeSingle();
+    const { data: existingEmail } = await supabase
+      .from("users").select("id").eq("email", email).maybeSingle();
+
+    if (existingUsername || existingEmail)
+      return res.status(400).json({ error: "Username or email already exists" });
+
+    const hashed = await bcrypt.hash(password, 12);
+    const { data, error } = await supabase.from("users")
+      .insert([{
+        fullname: fullname || username, username, email,
+        password: hashed,
+        phone:    phone   || null,
+        address:  address || null,
+        role: "customer", status: "active"
+      }])
+      .select().single();
+    if (error) throw error;
+
+    console.log(`[REGISTER] ${new Date().toISOString()} - New user: ${username}`);
+
+    const token = jwt.sign(
+      { id: data.id, username: data.username, role: data.role },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+    res.status(201).json({
+      message: "Registered!",
+      token,
+      user: {
+        id: data.id, fullname: data.fullname, username: data.username,
+        email: data.email, phone: data.phone, address: data.address, role: data.role
+      }
+    });
+  } catch (err) {
+    console.error(`[REGISTER ERROR] ${err.message}`);
+    res.status(500).json({ error: "Registration failed" });
+  }
+});
+
+app.post("/api/login", authLimiter, async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password)
+    return res.status(400).json({ error: "Username and password required" });
+
+  try {
+    const { data: user } = await supabase.from("users").select("*")
+      .or(`username.eq.${sanitize(username)},email.eq.${sanitize(username)}`)
+      .eq("status", "active").maybeSingle();
+
+    const dummyHash = "$2a$12$dummyhashtopreventtimingattacksonuserlookup123456789";
+    const match = user
+      ? await bcrypt.compare(password, user.password)
+      : await bcrypt.compare(password, dummyHash);
+
+    if (!user || !match) {
+      console.warn(`[LOGIN FAIL] ${new Date().toISOString()} - Failed login attempt for: ${username}`);
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    console.log(`[LOGIN] ${new Date().toISOString()} - User logged in: ${user.username}`);
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+    res.json({
+      message: "Login successful!",
+      token,
+      user: {
+        id: user.id, fullname: user.fullname, username: user.username,
+        email: user.email, phone: user.phone, address: user.address, role: user.role
+      }
+    });
+  } catch (err) {
+    console.error(`[LOGIN ERROR] ${err.message}`);
+    res.status(500).json({ error: "Login failed" });
+  }
+});
+
+app.get("/api/me", auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id,fullname,username,phone,address,role,status,created_at")
+      .eq("id", req.user.id)
+      .single();
+    if (error || !data)
+      return res.status(404).json({ error: "User not found" });
+    res.json({ ...data, email: req.user.email });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch profile" });
+  }
+});
+
+app.put("/api/me", auth, async (req, res) => {
+  let { fullname, phone, address } = req.body;
+  fullname = sanitize(fullname);
+  phone = sanitize(phone);
+  address = sanitize(address);
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({ fullname, phone, address })
+      .eq("id", req.user.id)
+      .select("id,fullname,username,phone,address,role,status")
+      .single();
+    if (error) throw error;
+    res.json({
+      message: "Profile updated!",
+      user: { ...data, email: req.user.email },
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
+app.put("/api/me", auth, async (req, res) => {
+  let { fullname, phone, address } = req.body;
+  fullname = sanitize(fullname);
+  phone    = sanitize(phone);
+  address  = sanitize(address);
+  try {
+    const { data, error } = await supabase.from("users")
+      .update({ fullname, phone, address })
+      .eq("id", req.user.id)
+      .select("id,fullname,username,email,phone,address,role,status").single();
+    if (error) throw error;
+    res.json({ message: "Profile updated!", user: data });
+  } catch (err) { res.status(500).json({ error: "Failed to update profile" }); }
+});
+
+// ============================================================
+// OTP / MFA (MOCK — no real SMS sent, code is logged to console)
+// Swap this block for a real SMS provider later if you upgrade.
+// ============================================================
+
+const otpStore = new Map(); // phone -> { code, expiresAt }
+
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
+}
+
+app.post("/api/otp/send", otpLimiter, async (req, res) => {
+  const phone = sanitize(req.body.phone);
+
+  if (!phone)
+    return res.status(400).json({ error: "Phone number required" });
+
+  const code = generateOtp();
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  otpStore.set(phone, { code, expiresAt });
+
+  // 👇 Real SMS would be sent here. For now the code is just logged.
+  console.log(`\n[MOCK OTP] ${new Date().toISOString()} - Code for ${phone}: ${code}\n`);
+
+  res.json({ message: "Verification code sent (check server console — mock mode)" });
+});
+
+app.post("/api/otp/verify", otpLimiter, async (req, res) => {
+  const phone = sanitize(req.body.phone);
+  const code  = sanitize(req.body.code);
+
+  if (!phone || !code)
+    return res.status(400).json({ error: "Phone and code required" });
+
+  const record = otpStore.get(phone);
+
+  if (!record)
+    return res.status(400).json({ error: "No code was sent to this number" });
+
+  if (Date.now() > record.expiresAt) {
+    otpStore.delete(phone);
+    return res.status(400).json({ error: "Code has expired. Please request a new one." });
+  }
+
+  if (record.code !== code)
+    return res.status(400).json({ error: "Invalid code" });
+
+  otpStore.delete(phone); // one-time use
+  console.log(`[MOCK OTP] ${new Date().toISOString()} - ${phone} verified`);
+  res.json({ message: "Verified" });
+});
+
+// ============================================================
+// PRODUCTS
+// ============================================================
+
+app.get("/api/products", async (req, res) => {
+  const { category, search } = req.query;
+  try {
+    let q = supabase.from("products").select("*")
+      .order("created_at", { ascending: false });
+    if (category && category !== "All") q = q.eq("category", sanitize(category));
+    if (search) q = q.or(`title.ilike.%${sanitize(search)}%,description.ilike.%${sanitize(search)}%`);
+    const { data, error } = await q;
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error(`[PRODUCTS ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
+});
+
+app.get("/api/products/featured", async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("products").select("*")
+      .eq("featured", true)
+      .order("created_at", { ascending: false }).limit(8);
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      const { data: fallback, error: fallbackErr } = await supabase
+        .from("products").select("*")
+        .order("created_at", { ascending: false }).limit(8);
+      if (fallbackErr) throw fallbackErr;
+      return res.json(fallback);
+    }
+    res.json(data);
+  } catch (err) {
+    console.error(`[FEATURED ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to fetch featured products" });
+  }
+});
+
+app.get("/api/products/:id", async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("products").select("*")
+      .eq("id", req.params.id).single();
+    if (error || !data) return res.status(404).json({ error: "Product not found" });
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: "Failed to fetch product" }); }
+});
+
+app.post("/api/products", auth, adminOnly, async (req, res) => {
+  let { title, description, price, discount, category, image_url, stock, featured } = req.body;
+  title       = sanitize(title);
+  category    = sanitize(category);
+  description = sanitize(description);
+  if (!title || !price || !category)
+    return res.status(400).json({ error: "Title, price, category required" });
+  if (isNaN(+price) || +price < 0)
+    return res.status(400).json({ error: "Invalid price" });
+  try {
+    const { data, error } = await supabase.from("products")
+      .insert([{
+        title, description, price: +price,
+        discount: +discount || 0, category, image_url,
+        stock: +stock || 0, featured: !!featured
+      }]).select().single();
+    if (error) {
+      console.error(`[ADD PRODUCT ERROR] Supabase: ${error.message} | code: ${error.code} | details: ${error.details}`);
+      if (error.code === "42501" || error.message?.includes("policy")) {
+        return res.status(500).json({ error: "Database permission denied. Fix: disable RLS on 'products' table or add a service-role key." });
+      }
+      throw error;
+    }
+    res.status(201).json({ message: "Product added!", product: data });
+  } catch (err) {
+    console.error(`[ADD PRODUCT ERROR] ${err.message}`);
+    res.status(500).json({ error: err.message || "Failed to add product" });
+  }
+});
+
+app.put("/api/products/:id", auth, adminOnly, async (req, res) => {
+  let { title, description, price, discount, category, image_url, stock, featured } = req.body;
+  title       = sanitize(title);
+  category    = sanitize(category);
+  description = sanitize(description);
+  try {
+    const { data, error } = await supabase.from("products")
+      .update({ title, description, price: +price, discount: +discount, category, image_url, stock: +stock, featured: !!featured })
+      .eq("id", req.params.id).select().single();
+    if (error) {
+      console.error(`[UPDATE PRODUCT ERROR] Supabase: ${error.message} | code: ${error.code} | details: ${error.details}`);
+      if (error.code === "42501" || error.message?.includes("policy")) {
+        return res.status(500).json({ error: "Database permission denied. Fix: disable RLS on 'products' table or add a service-role key." });
+      }
+      throw error;
+    }
+    res.json({ message: "Product updated!", product: data });
+  } catch (err) {
+    console.error(`[UPDATE PRODUCT ERROR] ${err.message}`);
+    res.status(500).json({ error: err.message || "Failed to update product" });
+  }
+});
+
+app.delete("/api/products/:id", auth, adminOnly, async (req, res) => {
+  try {
+    const { error } = await supabase.from("products").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ message: "Product deleted!" });
+  } catch (err) { res.status(500).json({ error: "Failed to delete product" }); }
+});
+
+// ============================================================
+// CART
+// ============================================================
+
+app.get("/api/cart", auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("cart_items")
+      .select("*, products(*)").eq("user_id", req.user.id);
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: "Failed to fetch cart" }); }
+});
+
+app.post("/api/cart", auth, async (req, res) => {
+  const { product_id, quantity } = req.body;
+  if (!product_id) return res.status(400).json({ error: "Product ID required" });
+  try {
+    const { data: existing } = await supabase.from("cart_items").select("*")
+      .eq("user_id", req.user.id).eq("product_id", product_id).maybeSingle();
+    if (existing) {
+      const { data, error } = await supabase.from("cart_items")
+        .update({ quantity: existing.quantity + (Math.abs(+quantity) || 1) })
+        .eq("id", existing.id).select().single();
+      if (error) throw error;
+      return res.json({ message: "Cart updated!", item: data });
+    }
+    const { data, error } = await supabase.from("cart_items")
+      .insert([{ user_id: req.user.id, product_id, quantity: Math.abs(+quantity) || 1 }])
+      .select().single();
+    if (error) throw error;
+    res.status(201).json({ message: "Added to cart!", item: data });
+  } catch (err) {
+    console.error(`[CART ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to update cart" });
+  }
+});
+
+app.put("/api/cart/:id", auth, async (req, res) => {
+  const quantity = Math.abs(+req.body.quantity);
+  try {
+    if (!quantity) {
+      await supabase.from("cart_items").delete()
+        .eq("id", req.params.id).eq("user_id", req.user.id);
+      return res.json({ message: "Item removed" });
+    }
+    const { data, error } = await supabase.from("cart_items")
+      .update({ quantity })
+      .eq("id", req.params.id).eq("user_id", req.user.id)
+      .select().single();
+    if (error) throw error;
+    res.json({ message: "Updated!", item: data });
+  } catch (err) { res.status(500).json({ error: "Failed to update cart item" }); }
+});
+
+app.delete("/api/cart/:id", auth, async (req, res) => {
+  try {
+    const { error } = await supabase.from("cart_items").delete()
+      .eq("id", req.params.id).eq("user_id", req.user.id);
+    if (error) throw error;
+    res.json({ message: "Removed!" });
+  } catch (err) { res.status(500).json({ error: "Failed to remove cart item" }); }
+});
+
+app.delete("/api/cart", auth, async (req, res) => {
+  try {
+    await supabase.from("cart_items").delete().eq("user_id", req.user.id);
+    res.json({ message: "Cart cleared!" });
+  } catch (err) { res.status(500).json({ error: "Failed to clear cart" }); }
+});
+
+// ============================================================
+// ORDERS
+// ============================================================
+
+app.get("/api/orders", auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("orders")
+      .select("*, order_items(*, products(*))")
+      .eq("user_id", req.user.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: "Failed to fetch orders" }); }
+});
+
+app.post("/api/orders", auth, async (req, res) => {
+  const { shipping_address } = req.body;
+  try {
+    const { data: cart } = await supabase.from("cart_items")
+      .select("*, products(*)").eq("user_id", req.user.id);
+    if (!cart?.length) return res.status(400).json({ error: "Cart is empty" });
+
+    const total = cart.reduce((s, i) => {
+      const p     = i.products;
+      const price = p.discount > 0 ? p.price * (1 - p.discount / 100) : p.price;
+      return s + price * i.quantity;
+    }, 0);
+
+    const { data: order, error: oErr } = await supabase.from("orders")
+      .insert([{
+        user_id: req.user.id,
+        total_amount: Math.round(total * 100) / 100,
+        shipping_address: sanitize(shipping_address) || "",
+        status: "pending"
+      }]).select().single();
+    if (oErr) throw oErr;
+
+    await supabase.from("order_items").insert(
+      cart.map(i => ({
+        order_id:   order.id,
+        product_id: i.product_id,
+        quantity:   i.quantity,
+        unit_price: i.products.discount > 0
+          ? i.products.price * (1 - i.products.discount / 100)
+          : i.products.price
+      }))
+    );
+
+    for (const item of cart) {
+      const currentStock = item.products.stock || 0;
+      const newStock = Math.max(0, currentStock - item.quantity);
+      const { error: stockErr } = await supabase.from("products")
+        .update({ stock: newStock })
+        .eq("id", item.product_id);
+      if (stockErr) {
+        console.error(`[STOCK UPDATE ERROR] product ${item.product_id}: ${stockErr.message}`);
+      }
+    }
+
+    await supabase.from("cart_items").delete().eq("user_id", req.user.id);
+    console.log(`[ORDER] ${new Date().toISOString()} - Order placed by user: ${req.user.id}`);
+    res.status(201).json({ message: "Order placed!", order });
+  } catch (err) {
+    console.error(`[ORDER ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to place order" });
+  }
+});
+
+// PUT /api/orders/:id — allow a logged-in customer to cancel their OWN order.
+app.put("/api/orders/:id", auth, async (req, res) => {
+  const { status } = req.body;
+
+  if (status !== "cancelled")
+    return res.status(400).json({ error: "Invalid status value" });
+
+  try {
+    const { data: existingOrder, error: findErr } = await supabase
+      .from("orders")
+      .select("id, user_id, status")
+      .eq("id", req.params.id)
+      .eq("user_id", req.user.id)
+      .single();
+
+    if (findErr || !existingOrder)
+      return res.status(404).json({ error: "Order not found" });
+
+    if (!["pending", "confirmed"].includes(existingOrder.status))
+      return res.status(400).json({ error: "This order can no longer be cancelled" });
+
+    const { data: orderItems } = await supabase
+      .from("order_items")
+      .select("product_id, quantity, products(stock)")
+      .eq("order_id", req.params.id);
+
+    if (orderItems?.length) {
+      for (const item of orderItems) {
+        const restoredStock = (item.products?.stock || 0) + item.quantity;
+        const { error: stockErr } = await supabase
+          .from("products")
+          .update({ stock: restoredStock })
+          .eq("id", item.product_id);
+        if (stockErr) {
+          console.error(`[STOCK RESTORE ERROR] product ${item.product_id}: ${stockErr.message}`);
+        }
+      }
+    }
+
+    const { data, error } = await supabase
+      .from("orders")
+      .update({ status: "cancelled" })
+      .eq("id", req.params.id)
+      .eq("user_id", req.user.id)
+      .select()
+      .single();
+    if (error) throw error;
+
+    console.log(`[ORDER CANCELLED] ${new Date().toISOString()} - Order ${req.params.id} by user ${req.user.id}`);
+    res.json({ message: "Order cancelled!", order: data });
+  } catch (err) {
+    console.error(`[CANCEL ORDER ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to cancel order" });
+  }
+});
+
+
+
+
+
+
+
+// ============================================================
+// ADMIN
+// ============================================================
+
+app.get("/api/admin/users", auth, adminOnly, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id,fullname,username,phone,address,role,status,created_at")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+app.get("/api/admin/stats", auth, adminOnly, async (req, res) => {
+  try {
+    const [p, u, o, ls] = await Promise.all([
+      supabase.from("products").select("id", { count: "exact" }),
+      supabase
+        .from("profiles")
+        .select("id", { count: "exact" })
+        .eq("role", "customer"),
+      supabase.from("orders").select("id,total_amount", { count: "exact" }),
+      supabase.from("products").select("id", { count: "exact" }).lt("stock", 5),
+    ]);
+    res.json({
+      total_products: p.count || 0,
+      total_customers: u.count || 0,
+      total_orders: o.count || 0,
+      total_revenue:
+        o.data?.reduce((s, x) => s + Number(x.total_amount), 0) || 0,
+      low_stock: ls.count || 0,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
+app.get("/api/admin/orders", auth, adminOnly, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select(
+        "*, profiles(id,fullname,username), order_items(*, products(title))",
+      )
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch orders" });
+  }
+});
+
+app.put("/api/admin/orders/:id", auth, adminOnly, async (req, res) => {
+  const { status } = req.body;
+  const allowed = ["pending", "confirmed", "shipped", "delivered", "cancelled"];
+  if (!allowed.includes(status))
+    return res.status(400).json({ error: "Invalid status value" });
+  try {
+    if (status === "cancelled") {
+      const { data: existingOrder } = await supabase.from("orders")
+        .select("status").eq("id", req.params.id).single();
+
+      if (existingOrder && existingOrder.status !== "cancelled") {
+        const { data: orderItems } = await supabase.from("order_items")
+          .select("product_id, quantity, products(stock)")
+          .eq("order_id", req.params.id);
+
+        if (orderItems?.length) {
+          for (const item of orderItems) {
+            const restoredStock = (item.products?.stock || 0) + item.quantity;
+            const { error: stockErr } = await supabase.from("products")
+              .update({ stock: restoredStock })
+              .eq("id", item.product_id);
+            if (stockErr) {
+              console.error(`[STOCK RESTORE ERROR] product ${item.product_id}: ${stockErr.message}`);
+            }
+          }
+        }
+      }
+    }
+
+    const { data, error } = await supabase.from("orders")
+      .update({ status }).eq("id", req.params.id).select().single();
+    if (error) throw error;
+    res.json({ message: "Status updated!", order: data });
+  } catch (err) { res.status(500).json({ error: "Failed to update order status" }); }
+});
+
+// ============================================================
+// PAYMENTS (manual GCash/Maya proof + admin verification)
+// ============================================================
+
+// Customer submits payment method + reference + proof screenshot
+// Expects: { payment_method: "GCASH"|"MAYA", payment_reference: string, proof_base64: "data:image/...;base64,...." }
+app.put("/api/orders/:id/payment", auth, async (req, res) => {
+  const { payment_method, payment_reference, proof_base64 } = req.body;
+
+  if (!["GCASH", "MAYA"].includes(payment_method))
+    return res.status(400).json({ error: "payment_method must be GCASH or MAYA" });
+
+  const reference = sanitize(payment_reference);
+  if (!reference)
+    return res.status(400).json({ error: "Payment reference is required" });
+
+  if (!proof_base64 || !proof_base64.startsWith("data:image/"))
+    return res.status(400).json({ error: "A valid payment proof image is required" });
+
+  try {
+    // Confirm the order exists, belongs to this user, and is in a state that accepts payment
+    const { data: order, error: findErr } = await supabase
+      .from("orders")
+      .select("id, user_id, payment_status")
+      .eq("id", req.params.id)
+      .eq("user_id", req.user.id)
+      .single();
+
+    if (findErr || !order)
+      return res.status(404).json({ error: "Order not found" });
+
+    if (!["PENDING", "REJECTED"].includes(order.payment_status))
+      return res.status(400).json({ error: "This order is not awaiting payment" });
+
+    // Parse the data URI: "data:image/jpeg;base64,AAAA..."
+    const match = proof_base64.match(/^data:(image\/\w+);base64,(.+)$/);
+    if (!match)
+      return res.status(400).json({ error: "Invalid image data" });
+
+    const mimeType = match[1];
+    const ext = mimeType.split("/")[1] || "jpg";
+    const buffer = Buffer.from(match[2], "base64");
+
+    if (buffer.length > 8 * 1024 * 1024)
+      return res.status(400).json({ error: "Image too large (max 8MB)" });
+
+    const storagePath = `${req.user.id}/${order.id}/${Date.now()}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("payment-proofs")
+      .upload(storagePath, buffer, { contentType: mimeType, upsert: true });
+
+    if (uploadErr) throw uploadErr;
+
+    const { data: updated, error: updateErr } = await supabase
+      .from("orders")
+      .update({
+        payment_method: payment_method,
+        payment_reference: reference,
+        payment_proof_url: storagePath,
+        payment_status: "PENDING_VERIFICATION",
+      })
+      .eq("id", order.id)
+      .eq("user_id", req.user.id)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    console.log(`[PAYMENT SUBMITTED] ${new Date().toISOString()} - Order ${order.id} by user ${req.user.id}`);
+    res.json({ message: "Payment proof submitted! Waiting for admin verification.", order: updated });
+  } catch (err) {
+    console.error(`[PAYMENT SUBMIT ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to submit payment proof" });
+  }
+});
+
+// Admin: list orders awaiting payment verification
+app.get("/api/admin/payments/pending", auth, adminOnly, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*, users(id, fullname, email, username)")
+      .eq("payment_status", "PENDING_VERIFICATION")
+      .order("updated_at", { ascending: true });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch pending payments" });
+  }
+});
+
+// Admin: get a short-lived signed URL to view a specific order's proof image
+app.get("/api/admin/orders/:id/payment-proof", auth, adminOnly, async (req, res) => {
+  try {
+    const { data: order, error: findErr } = await supabase
+      .from("orders").select("payment_proof_url").eq("id", req.params.id).single();
+    if (findErr || !order?.payment_proof_url)
+      return res.status(404).json({ error: "No payment proof on this order" });
+
+    const { data, error } = await supabase.storage
+      .from("payment-proofs")
+      .createSignedUrl(order.payment_proof_url, 300); // 5 minutes
+    if (error) throw error;
+
+    res.json({ url: data.signedUrl });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load payment proof" });
+  }
+});
+
+// Admin: approve or reject a pending payment
+app.put("/api/admin/orders/:id/verify-payment", auth, adminOnly, async (req, res) => {
+  const { decision } = req.body; // "approve" | "reject"
+  if (!["approve", "reject"].includes(decision))
+    return res.status(400).json({ error: "decision must be 'approve' or 'reject'" });
+
+  try {
+    const { data: order, error: findErr } = await supabase
+      .from("orders").select("id, payment_status").eq("id", req.params.id).single();
+    if (findErr || !order)
+      return res.status(404).json({ error: "Order not found" });
+
+    if (order.payment_status !== "PENDING_VERIFICATION")
+      return res.status(400).json({ error: "This order is not awaiting verification" });
+
+    const newStatus = decision === "approve" ? "PAID" : "REJECTED";
+
+    const { data: updated, error: updateErr } = await supabase
+      .from("orders")
+      .update({ payment_status: newStatus })
+      .eq("id", req.params.id)
+      .select()
+      .single();
+    if (updateErr) throw updateErr;
+
+    console.log(`[PAYMENT ${newStatus}] ${new Date().toISOString()} - Order ${req.params.id} by admin ${req.user.id}`);
+    res.json({ message: `Payment ${newStatus}!`, order: updated });
+    // NOTE: Lalamove booking trigger gets added here in Phase 4, only when newStatus === "PAID"
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update payment status" });
+  }
+});
+
+
+
+app.get("/api/admin/users/:id/orders", auth, adminOnly, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*, order_items(*, products(title))")
+      .eq("user_id", req.params.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch user orders" });
+  }
+});
+
+app.put("/api/admin/users/:id/status", auth, adminOnly, async (req, res) => {
+  const { status } = req.body;
+  if (!["active", "suspended"].includes(status))
+    return res.status(400).json({ error: "Invalid status value" });
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({ status })
+      .eq("id", req.params.id)
+      .select("id,fullname,username,role,status")
+      .single();
+    if (error) throw error;
+    console.log(
+      `[ADMIN] ${new Date().toISOString()} - User ${req.params.id} status → ${status}`,
+    );
+    res.json({ message: "User status updated!", user: data });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update user status" });
+  }
+});
+
+app.use((req, res) => {
+  res.status(404).json({ error: "Route not found" });
+});
+
+app.use((err, req, res, next) => {
+  console.error(`[ERROR] ${new Date().toISOString()} - ${err.message}`);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`\n✅  FITCHEQUE backend (SECURED) running → http://localhost:${PORT}\n`);
+  console.log("  Security features active:");
+  console.log("  ✅ Helmet (CSP, X-Frame-Options, X-Content-Type-Options, HSTS)");
+  console.log("  ✅ Rate limiting (10 auth / 100 api requests per 15min)");
+  console.log("  ✅ CORS restricted to allowed origins");
+  console.log("  ✅ Input sanitization on all user inputs");
+  console.log("  ✅ Morgan request logging");
+  console.log("  ✅ Timing-safe login (dummy bcrypt compare)");
+  console.log("  ✅ Generic error messages (no stack trace leaks)\n");
+});

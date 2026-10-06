@@ -1,0 +1,527 @@
+import { useState, useEffect } from "react";
+import { useApp } from "../context/AppContext";
+import { apiFetch, fmt, salePrice } from "../utils/api";
+import { supabase } from "../utils/supabase";
+
+const STATUS_STYLES = {
+  pending:   { bg: "#fef9c3", color: "#854d0e", label: "Pending" },
+  confirmed: { bg: "#dbeafe", color: "#1e40af", label: "Confirmed" },
+  shipped:   { bg: "#ede9fe", color: "#6d28d9", label: "Shipped" },
+  delivered: { bg: "#dcfce7", color: "#166534", label: "Delivered" },
+  cancelled: { bg: "#fee2e2", color: "#991b1b", label: "Cancelled" },
+};
+
+function StatusBadge({ status }) {
+  const s = STATUS_STYLES[status] || { bg: "#f3f4f6", color: "#374151", label: status };
+  return (
+    <span style={{
+      display: "inline-block",
+      background: s.bg, color: s.color,
+      fontSize: 11, fontWeight: 800,
+      padding: "4px 12px", borderRadius: 20,
+      letterSpacing: 0.5,
+    }}>{s.label}</span>
+  );
+}
+
+function OrderCard({ order, onCancel, cancelling }) {
+  const [open, setOpen] = useState(false);
+  const date = new Date(order.created_at).toLocaleDateString("en-PH", {
+    year: "numeric", month: "short", day: "numeric",
+  });
+
+  const canCancel = order.status === "pending" || order.status === "confirmed";
+
+  return (
+    <div style={{
+      border: "1px solid #fce7f3", borderRadius: 14,
+      overflow: "hidden", marginBottom: 14,
+      boxShadow: "0 2px 10px rgba(190,24,93,0.05)",
+    }}>
+      {/* Order header row */}
+      <div
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "14px 18px", background: "#fff", cursor: "pointer",
+          flexWrap: "wrap", gap: 10,
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontSize: 11, color: "#aaa", fontWeight: 700, letterSpacing: 1 }}>
+            ORDER ID
+          </span>
+          <span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: "#be185d" }}>
+            #{order.id.slice(0, 8).toUpperCase()}
+          </span>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, textAlign: "center" }}>
+          <span style={{ fontSize: 11, color: "#aaa", fontWeight: 700, letterSpacing: 1 }}>DATE</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#333" }}>{date}</span>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, textAlign: "center" }}>
+          <span style={{ fontSize: 11, color: "#aaa", fontWeight: 700, letterSpacing: 1 }}>TOTAL</span>
+          <span style={{ fontSize: 14, fontWeight: 900, color: "#be185d" }}>{fmt(order.total_amount)}</span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <StatusBadge status={order.status} />
+          <span style={{ fontSize: 18, color: "#be185d", transition: "transform .2s", display: "inline-block", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>
+            ▾
+          </span>
+        </div>
+      </div>
+
+      {/* Expandable order details */}
+      {open && (
+        <div style={{ borderTop: "1px solid #fce7f3", background: "#fff5f7", padding: "16px 18px" }}>
+
+          {/* Shipping info */}
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ fontSize: 10, fontWeight: 800, color: "#be185d", letterSpacing: 1.5, margin: "0 0 6px" }}>
+              SHIPPING ADDRESS
+            </p>
+            <p style={{ fontSize: 13, color: "#555", margin: 0 }}>{order.shipping_address || "—"}</p>
+          </div>
+
+          {/* Items list */}
+          <p style={{ fontSize: 10, fontWeight: 800, color: "#be185d", letterSpacing: 1.5, margin: "0 0 10px" }}>
+            ITEMS ORDERED
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {order.order_items?.map((item, idx) => {
+              const product = item.products || {};
+              const imgUrl  = product.image_url || `https://placehold.co/52/fce7f3/be185d?text=?`;
+              const title   = product.title || "Unknown Product";
+              const price   = item.unit_price ?? salePrice(product.price, product.discount);
+              return (
+                <div key={item.id || idx} style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  background: "#fff", borderRadius: 10,
+                  padding: "10px 14px", border: "1px solid #fce7f3",
+                }}>
+                  <img
+                    src={imgUrl} alt={title}
+                    onError={(e) => (e.target.src = "https://placehold.co/52/fce7f3/be185d?text=?")}
+                    style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 8, flexShrink: 0, border: "1px solid #fce7f3" }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {title}
+                    </p>
+                    <p style={{ fontSize: 12, color: "#aaa", margin: 0 }}>
+                      Qty: <strong style={{ color: "#555" }}>{item.quantity}</strong>
+                      &nbsp;·&nbsp;{fmt(price)} each
+                    </p>
+                  </div>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: "#be185d", flexShrink: 0 }}>
+                    {fmt(price * item.quantity)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Total row */}
+          <div style={{
+            display: "flex", justifyContent: "flex-end", alignItems: "center",
+            marginTop: 14, paddingTop: 12, borderTop: "1px dashed #fce7f3",
+          }}>
+            <span style={{ fontSize: 13, color: "#888", marginRight: 12 }}>Order Total</span>
+            <span style={{ fontSize: 16, fontWeight: 900, color: "#be185d" }}>{fmt(order.total_amount)}</span>
+          </div>
+
+          {/* Cancel order */}
+          {canCancel && (
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px dashed #fce7f3", display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); onCancel(order.id); }}
+                disabled={cancelling}
+                style={{
+                  background: "#fff", border: "1.5px solid #fecaca", color: "#ef4444",
+                  fontWeight: 700, fontSize: 12, padding: "9px 18px", borderRadius: 10,
+                  cursor: cancelling ? "not-allowed" : "pointer", opacity: cancelling ? 0.6 : 1,
+                }}
+              >
+                {cancelling ? "CANCELLING..." : "✕ CANCEL ORDER"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SecurityTab({ toast }) {
+  const [factors, setFactors]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [enrolling, setEnrolling] = useState(false);
+  const [factorId, setFactorId]   = useState(null);
+  const [qrCode, setQrCode]       = useState(null);
+  const [secret, setSecret]       = useState(null);
+  const [code, setCode]           = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [unenrolling, setUnenrolling] = useState(null);
+
+  const loadFactors = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.auth.mfa.listFactors();
+    if (!error) setFactors(data?.totp || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadFactors(); }, []);
+
+  const startEnroll = async () => {
+    setEnrolling(true);
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+    if (error) {
+      toast(error.message, "error");
+      setEnrolling(false);
+      return;
+    }
+    setFactorId(data.id);
+    setQrCode(data.totp.qr_code);
+    setSecret(data.totp.secret);
+  };
+
+  const confirmEnroll = async () => {
+    if (!code || code.length !== 6) {
+      toast("Enter the 6-digit code from your authenticator app", "error");
+      return;
+    }
+    setVerifying(true);
+    try {
+      const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId });
+      if (challengeErr) throw challengeErr;
+
+      const { error: verifyErr } = await supabase.auth.mfa.verify({
+        factorId,
+        challengeId: challenge.id,
+        code,
+      });
+      if (verifyErr) throw verifyErr;
+
+      toast("Two-factor authentication enabled! 🔐", "success");
+      setEnrolling(false);
+      setQrCode(null);
+      setSecret(null);
+      setCode("");
+      setFactorId(null);
+      await loadFactors();
+    } catch (err) {
+      toast(err.message || "Invalid code, please try again", "error");
+    }
+    setVerifying(false);
+  };
+
+  const cancelEnroll = async () => {
+    if (factorId) {
+      await supabase.auth.mfa.unenroll({ factorId });
+    }
+    setEnrolling(false);
+    setQrCode(null);
+    setSecret(null);
+    setCode("");
+    setFactorId(null);
+  };
+
+  const removeFactor = async (id) => {
+    if (!window.confirm("Disable two-factor authentication? This will remove admin AAL2 protection.")) return;
+    setUnenrolling(id);
+    const { error } = await supabase.auth.mfa.unenroll({ factorId: id });
+    if (error) toast(error.message, "error");
+    else { toast("Two-factor authentication disabled.", "info"); await loadFactors(); }
+    setUnenrolling(null);
+  };
+
+  const verifiedFactor = factors.find((f) => f.status === "verified");
+
+  if (loading) return (
+    <div style={{ textAlign: "center", padding: "60px 24px" }}>
+      <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
+      <p style={{ color: "#be185d", fontWeight: 600 }}>Loading security settings...</p>
+    </div>
+  );
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #fce7f3", boxShadow: "0 2px 16px rgba(190,24,93,0.06)", padding: 24 }}>
+      <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 900, color: "#1a1a1a", margin: "0 0 6px" }}>
+        Two-Factor Authentication
+      </h3>
+      <p style={{ color: "#888", fontSize: 13, margin: "0 0 20px" }}>
+        Adds an extra security step using an authenticator app (Google Authenticator, Authy, etc).
+      </p>
+
+      {/* Already enrolled */}
+      {verifiedFactor && !enrolling && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 12, padding: "14px 18px", marginBottom: 16 }}>
+            <span style={{ fontSize: 22 }}>✅</span>
+            <div>
+              <p style={{ margin: 0, fontWeight: 700, color: "#166534", fontSize: 13 }}>Two-factor authentication is enabled</p>
+              <p style={{ margin: 0, color: "#16a34a", fontSize: 12 }}>Your account is protected with an authenticator app.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => removeFactor(verifiedFactor.id)}
+            disabled={unenrolling === verifiedFactor.id}
+            style={{ background: "#fff", border: "1.5px solid #fecaca", color: "#ef4444", fontWeight: 700, fontSize: 12, padding: "10px 20px", borderRadius: 10, cursor: "pointer" }}
+          >
+            {unenrolling === verifiedFactor.id ? "REMOVING..." : "DISABLE 2FA"}
+          </button>
+        </div>
+      )}
+
+      {/* Not enrolled, not currently enrolling */}
+      {!verifiedFactor && !enrolling && (
+        <button
+          onClick={startEnroll}
+          style={{ background: "linear-gradient(135deg, #f9a8d4, #be185d)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, padding: "12px 28px", cursor: "pointer" }}
+        >
+          ENABLE TWO-FACTOR AUTHENTICATION
+        </button>
+      )}
+
+      {/* Enrollment in progress — QR + code entry */}
+      {enrolling && qrCode && (
+        <div>
+          <p style={{ fontSize: 12, fontWeight: 700, color: "#be185d", marginBottom: 10 }}>
+            1. Scan this QR code with Google Authenticator, Authy, or similar
+          </p>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+            <img src={qrCode} alt="TOTP QR code" style={{ width: 200, height: 200, border: "1px solid #fce7f3", borderRadius: 12, padding: 8, background: "#fff" }} />
+          </div>
+
+          {secret && (
+            <p style={{ fontSize: 11, color: "#aaa", textAlign: "center", marginBottom: 20, wordBreak: "break-all" }}>
+              Can't scan? Enter this code manually: <br />
+              <span style={{ fontFamily: "monospace", color: "#be185d", fontWeight: 700 }}>{secret}</span>
+            </p>
+          )}
+
+          <p style={{ fontSize: 12, fontWeight: 700, color: "#be185d", marginBottom: 10 }}>
+            2. Enter the 6-digit code from the app
+          </p>
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="000000"
+            maxLength={6}
+            style={{ width: "100%", padding: "12px 14px", border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 18, letterSpacing: 6, textAlign: "center", outline: "none", background: "#fff5f7", boxSizing: "border-box", marginBottom: 16, fontFamily: "monospace" }}
+          />
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={cancelEnroll} style={{ flex: 1, background: "#fff", border: "1.5px solid #fce7f3", borderRadius: 10, color: "#be185d", fontWeight: 700, fontSize: 13, padding: "12px 0", cursor: "pointer" }}>
+              CANCEL
+            </button>
+            <button onClick={confirmEnroll} disabled={verifying} style={{ flex: 2, background: "linear-gradient(135deg, #f9a8d4, #be185d)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, padding: "12px 0", cursor: "pointer", opacity: verifying ? 0.7 : 1 }}>
+              {verifying ? "VERIFYING..." : "CONFIRM & ENABLE"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Profile({ setPage }) {
+  const { user, logout, updateProfile, toast } = useApp();
+
+  const [activeTab, setActiveTab] = useState("profile"); // "profile" | "orders"
+  const [edit, setEdit]           = useState(false);
+  const [form, setForm]           = useState({
+    fullname: user?.fullname || "",
+    phone:    user?.phone    || "",
+    address:  user?.address  || "",
+  });
+  const [loading, setLoading]     = useState(false);
+
+  const [orders, setOrders]       = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError]     = useState(null);
+  const [cancellingId, setCancellingId]   = useState(null);
+
+  useEffect(() => {
+    if (activeTab === "orders" && user) {
+      setOrdersLoading(true);
+      setOrdersError(null);
+      apiFetch("/orders")
+        .then(setOrders)
+        .catch((err) => setOrdersError(err.message))
+        .finally(() => setOrdersLoading(false));
+    }
+  }, [activeTab, user]);
+
+  if (!user) return (
+    <div style={{ textAlign: "center", padding: "80px 24px" }}>
+      <p style={{ color: "#be185d" }}>Please login to view your profile.</p>
+      <button onClick={() => setPage("login")} style={{ background: "linear-gradient(135deg, #f9a8d4, #be185d)", border: "none", borderRadius: 20, color: "#fff", fontWeight: 700, padding: "10px 28px", cursor: "pointer", marginTop: 12 }}>LOGIN</button>
+    </div>
+  );
+
+  const save = async () => {
+    setLoading(true);
+    try { await updateProfile(form); setEdit(false); }
+    catch (err) { toast(err.message, "error"); }
+    setLoading(false);
+  };
+
+  const cancelOrder = async (orderId) => {
+    if (!window.confirm("Cancel this order? This cannot be undone.")) return;
+    setCancellingId(orderId);
+    try {
+      await apiFetch(`/orders/${orderId}`, {
+        method: "PUT",
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+      setOrders((os) => os.map((o) => o.id === orderId ? { ...o, status: "cancelled" } : o));
+      toast("Order cancelled.", "success");
+    } catch (err) {
+      toast(err.message || "Failed to cancel order", "error");
+    }
+    setCancellingId(null);
+  };
+
+  const tabStyle = (tab) => ({
+    flex: 1, padding: "12px 0", border: "none", cursor: "pointer",
+    fontSize: 12, fontWeight: 800, letterSpacing: 1,
+    textTransform: "uppercase",
+    background: activeTab === tab ? "#fff" : "transparent",
+    color: activeTab === tab ? "#be185d" : "#aaa",
+    borderBottom: activeTab === tab ? "2.5px solid #be185d" : "2.5px solid transparent",
+    transition: "all .2s",
+  });
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#fff5f7" }}>
+      {/* Top bar */}
+      <div style={{ background: "linear-gradient(135deg, #fce7f3, #fbcfe8)", padding: "20px 24px", display: "flex", alignItems: "center", gap: 12 }}>
+        <button onClick={() => setPage("home")} style={{ background: "none", border: "none", cursor: "pointer", color: "#be185d", fontSize: 20, fontWeight: 700 }}>←</button>
+        <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 900, color: "#1a1a1a", margin: 0, letterSpacing: 1 }}>MY ACCOUNT</h2>
+      </div>
+
+      <div style={{ maxWidth: 660, margin: "32px auto", padding: "0 20px" }}>
+
+        {/* Avatar card */}
+        <div style={{ background: "linear-gradient(135deg, #fce7f3, #f9a8d4)", borderRadius: 20, padding: "32px 24px", textAlign: "center", marginBottom: 20, border: "1px solid #fce7f3", boxShadow: "0 4px 24px rgba(190,24,93,0.08)" }}>
+          <div style={{ width: 82, height: 82, borderRadius: "50%", margin: "0 auto 14px", background: "linear-gradient(135deg, #f9a8d4, #be185d)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, fontWeight: 900, color: "#fff", border: "4px solid #fff", boxShadow: "0 4px 16px rgba(190,24,93,0.25)" }}>
+            {user.fullname?.charAt(0).toUpperCase()}
+          </div>
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 900, color: "#1a1a1a", margin: "0 0 3px" }}>{user.fullname}</h2>
+          <p style={{ color: "#db2777", fontSize: 12, fontWeight: 600, letterSpacing: 1, margin: "0 0 8px", textTransform: "uppercase" }}>{user.username}</p>
+          <span style={{ display: "inline-block", background: user.role === "admin" ? "#be185d" : "#f9a8d4", color: user.role === "admin" ? "#fff" : "#be185d", fontSize: 10, fontWeight: 800, padding: "4px 14px", borderRadius: 20, letterSpacing: 1 }}>
+            {user.role?.toUpperCase()}
+          </span>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", background: "#fff", borderRadius: 12, border: "1px solid #fce7f3", marginBottom: 20, overflow: "hidden" }}>
+          <button style={tabStyle("profile")} onClick={() => setActiveTab("profile")}>👤 Profile</button>
+          <button style={tabStyle("security")} onClick={() => setActiveTab("security")}>🔐 Security</button>
+          <button style={tabStyle("orders")}  onClick={() => setActiveTab("orders")}>📦 My Orders</button>
+        </div>
+
+        {/* ── PROFILE TAB ── */}
+        {activeTab === "profile" && (
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #fce7f3", boxShadow: "0 2px 16px rgba(190,24,93,0.06)", padding: 24 }}>
+            {edit ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {[["Full Name", "fullname", "text"], ["Phone Number", "phone", "tel"], ["Address", "address", "text"]].map(([label, key, type]) => (
+                  <div key={key}>
+                    <label style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#888", letterSpacing: 1.5, marginBottom: 6 }}>{label.toUpperCase()}</label>
+                    <input
+                      type={type}
+                      value={form[key]}
+                      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                      style={{ width: "100%", padding: "10px 14px", border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 13, outline: "none", background: "#fff5f7", boxSizing: "border-box" }}
+                      onFocus={(e) => (e.target.style.borderColor = "#db2777")}
+                      onBlur={(e)  => (e.target.style.borderColor = "#fce7f3")}
+                    />
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                  <button onClick={save} disabled={loading} style={{ flex: 1, background: "linear-gradient(135deg, #f9a8d4, #be185d)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, padding: "12px 0", cursor: "pointer", opacity: loading ? 0.7 : 1 }}>
+                    {loading ? "SAVING..." : "SAVE CHANGES"}
+                  </button>
+                  <button onClick={() => setEdit(false)} style={{ flex: 1, background: "#fff", border: "1.5px solid #fce7f3", borderRadius: 10, color: "#be185d", fontWeight: 700, fontSize: 13, padding: "12px 0", cursor: "pointer" }}>CANCEL</button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                {[["EMAIL", user.email], ["PHONE NUMBER", user.phone || "Not set"], ["ADDRESS", user.address || "Not set"]].map(([label, val]) => (
+                  <div key={label} style={{ marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #fce7f3" }}>
+                    <p style={{ color: "#aaa", fontSize: 10, fontWeight: 800, letterSpacing: 1.5, margin: "0 0 5px" }}>{label}</p>
+                    <p style={{ color: val === "Not set" ? "#ddd" : "#333", fontSize: 14, fontWeight: 600, margin: 0 }}>{val}</p>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                  <button onClick={() => setEdit(true)} style={{ flex: 1, background: "linear-gradient(135deg, #f9a8d4, #be185d)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, padding: "12px 0", cursor: "pointer" }}>EDIT PROFILE</button>
+                  <button onClick={() => { logout(); setPage("home"); }} style={{ flex: 1, background: "#fff", border: "1.5px solid #fce7f3", borderRadius: 10, color: "#be185d", fontWeight: 700, fontSize: 13, padding: "12px 0", cursor: "pointer" }}>LOGOUT</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── ORDERS TAB ── */}
+        {activeTab === "orders" && (
+          <div>
+            {ordersLoading && (
+              <div style={{ textAlign: "center", padding: "60px 24px" }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
+                <p style={{ color: "#be185d", fontWeight: 600 }}>Loading your orders...</p>
+              </div>
+            )}
+
+            {ordersError && (
+              <div style={{ textAlign: "center", padding: "60px 24px" }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
+                <p style={{ color: "#be185d", fontWeight: 600 }}>{ordersError}</p>
+                <button
+                  onClick={() => setActiveTab("orders")}
+                  style={{ background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, padding: "10px 24px", cursor: "pointer", marginTop: 10 }}
+                >
+                  RETRY
+                </button>
+              </div>
+            )}
+
+            {!ordersLoading && !ordersError && orders.length === 0 && (
+              <div style={{ textAlign: "center", padding: "60px 24px", background: "#fff", borderRadius: 16, border: "1px solid #fce7f3" }}>
+                <div style={{ fontSize: 48, marginBottom: 14 }}>🛍️</div>
+                <h3 style={{ fontFamily: "'Playfair Display', serif", color: "#be185d", margin: "0 0 8px" }}>No orders yet</h3>
+                <p style={{ color: "#aaa", fontSize: 13, margin: "0 0 20px" }}>Start shopping to see your orders here!</p>
+                <button onClick={() => setPage("products")} style={{ background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, padding: "10px 28px", cursor: "pointer" }}>
+                  SHOP NOW
+                </button>
+              </div>
+            )}
+
+            {!ordersLoading && !ordersError && orders.length > 0 && (
+              <div>
+                <p style={{ fontSize: 12, color: "#aaa", fontWeight: 600, margin: "0 0 14px", letterSpacing: 0.5 }}>
+                  {orders.length} order{orders.length !== 1 ? "s" : ""} found — tap any order to expand
+                </p>
+                {orders.map((order) => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    onCancel={cancelOrder}
+                    cancelling={cancellingId === order.id}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+      {/* ── SECURITY TAB ── */}
+{activeTab === "security" && <SecurityTab toast={toast} />}
+    </div>
+  );
+}
