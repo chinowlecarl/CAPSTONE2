@@ -68,10 +68,9 @@ export default function Checkout({ setPage }) {
     textTransform: "uppercase",
   };
 
-  const validateStep1 = () => {
-    if (!form.fullname || !form.email || !form.phone || !form.city)
-      return false;
-    return true;
+    const validateStep1 = () => {
+    if (!form.fullname || !form.email || !form.phone || !form.city) return false;
+    return /^(09|\+639|639)\d{9}$/.test(form.phone.replace(/[\s-]/g, ""));
   };
 
   const placeOrder = async () => {
@@ -338,7 +337,7 @@ export default function Checkout({ setPage }) {
                   ← BACK TO CART
                 </button>
                 <button
-                  onClick={() => { if (validateStep1()) setStep(2); else alert("Please fill in all required fields."); }}
+                  onClick={() => { if (validateStep1()) setStep(2); else alert("Please fill in all required fields. Your phone must be a Philippine mobile number like 09XXXXXXXXX."); }}
                   style={{ flex: 2, background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 12, color: "#fff", fontWeight: 800, fontSize: 14, letterSpacing: 1, padding: "14px 0", cursor: "pointer" }}
                 >
                   CONTINUE TO PAYMENT →

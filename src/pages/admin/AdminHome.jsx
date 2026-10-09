@@ -5,11 +5,13 @@ import ManageEvents   from "./ManageEvents";
 import CheckInDesk    from "./CheckInDesk";
 import CreateEvent    from "./CreateEvent";
 import EventDetails   from "./EventDetails";
+import PaymentVerification from "./PaymentVerification";
 
 const TABS = [
   { id: "products", label: "📦 Products",     icon: "📦" },
   { id: "add",      label: "➕ Add Product",  icon: "➕" },
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
+  { id: "payments", label: "💳 Payments",     icon: "💳" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
   { id: "checkin",  label: "🔍 Check-In",     icon: "🔍" },
 ];
@@ -61,6 +63,7 @@ export default function AdminHome({ setPage }) {
         {tab === "products" && <ManageProducts setPage={setPage} />}
         {tab === "add"      && <CreateEvent    setPage={setPage} />}
         {tab === "orders"   && <ManageEvents   setPage={setPage} />}
+        {tab === "payments" && <PaymentVerification />}
         {tab === "users"    && <EventDetails   setPage={setPage} />}
         {tab === "checkin"  && <CheckInDesk    setPage={setPage} />}
       </div>

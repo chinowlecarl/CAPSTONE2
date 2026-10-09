@@ -5,8 +5,6 @@ require("dotenv").config();
 
 const express    = require("express");
 const cors       = require("cors");
-const bcrypt     = require("bcryptjs");
-const jwt        = require("jsonwebtoken");
 const helmet     = require("helmet");
 const rateLimit  = require("express-rate-limit");
 const morgan     = require("morgan");
@@ -34,11 +32,14 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-const allowedOrigins = [
+const localOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:5175",
+];
+const allowedOrigins = [
   process.env.FRONTEND_URL,
+  ...(process.env.NODE_ENV === "production" ? [] : localOrigins),
 ].filter(Boolean);
 
 app.use(cors({
@@ -57,14 +58,6 @@ app.use(cors({
 app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { error: "Too many attempts. Please try again in 15 minutes." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -73,21 +66,14 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const otpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: "Too many verification attempts. Please try again in 15 minutes." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 app.use("/api/", apiLimiter);
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ibivuhadbvxwciiwgfgy.supabase.co";
-// Prefer service-role key on the server (bypasses RLS). Falls back to anon key if not set.
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImliaXZ1aGFkYnZ4d2NpaXdnZmd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NDU3NTYsImV4cCI6MjA4OTQyMTc1Nn0.RxlNlmIgHDU8-QIhTU2kEWn7LAczMYrOVxU8ukfVlXk";
-const JWT_SECRET   = process.env.JWT_SECRET || "fitcheque_secret_2025_change_in_production";
-
+const SUPABASE_URL = process.env.SUPABASE_URL;
+// The service-role key stays on the server and bypasses Supabase RLS.
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
+}
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 function sanitize(str) {
@@ -148,115 +134,6 @@ app.get("/", (req, res) => {
   res.json({ message: "FITCHEQUE API is running!", status: "ok" });
 });
 
-// ============================================================
-// AUTH ROUTES
-// ============================================================
-
-app.post("/api/register", authLimiter, async (req, res) => {
-  let { fullname, username, email, password, phone, address } = req.body;
-
-  fullname = sanitize(fullname);
-  username = sanitize(username);
-  email    = sanitize(email);
-  phone    = sanitize(phone);
-  address  = sanitize(address);
-
-  if (!username || !email || !password)
-    return res.status(400).json({ error: "All fields required" });
-
-  if (password.length < 8)
-    return res.status(400).json({ error: "Password must be at least 8 characters" });
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email))
-    return res.status(400).json({ error: "Invalid email format" });
-
-  if (!/^[a-zA-Z0-9_]{3,30}$/.test(username))
-    return res.status(400).json({ error: "Username must be 3-30 alphanumeric characters" });
-
-  try {
-    const { data: existingUsername } = await supabase
-      .from("users").select("id").eq("username", username).maybeSingle();
-    const { data: existingEmail } = await supabase
-      .from("users").select("id").eq("email", email).maybeSingle();
-
-    if (existingUsername || existingEmail)
-      return res.status(400).json({ error: "Username or email already exists" });
-
-    const hashed = await bcrypt.hash(password, 12);
-    const { data, error } = await supabase.from("users")
-      .insert([{
-        fullname: fullname || username, username, email,
-        password: hashed,
-        phone:    phone   || null,
-        address:  address || null,
-        role: "customer", status: "active"
-      }])
-      .select().single();
-    if (error) throw error;
-
-    console.log(`[REGISTER] ${new Date().toISOString()} - New user: ${username}`);
-
-    const token = jwt.sign(
-      { id: data.id, username: data.username, role: data.role },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-    res.status(201).json({
-      message: "Registered!",
-      token,
-      user: {
-        id: data.id, fullname: data.fullname, username: data.username,
-        email: data.email, phone: data.phone, address: data.address, role: data.role
-      }
-    });
-  } catch (err) {
-    console.error(`[REGISTER ERROR] ${err.message}`);
-    res.status(500).json({ error: "Registration failed" });
-  }
-});
-
-app.post("/api/login", authLimiter, async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password)
-    return res.status(400).json({ error: "Username and password required" });
-
-  try {
-    const { data: user } = await supabase.from("users").select("*")
-      .or(`username.eq.${sanitize(username)},email.eq.${sanitize(username)}`)
-      .eq("status", "active").maybeSingle();
-
-    const dummyHash = "$2a$12$dummyhashtopreventtimingattacksonuserlookup123456789";
-    const match = user
-      ? await bcrypt.compare(password, user.password)
-      : await bcrypt.compare(password, dummyHash);
-
-    if (!user || !match) {
-      console.warn(`[LOGIN FAIL] ${new Date().toISOString()} - Failed login attempt for: ${username}`);
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    console.log(`[LOGIN] ${new Date().toISOString()} - User logged in: ${user.username}`);
-
-    const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-    res.json({
-      message: "Login successful!",
-      token,
-      user: {
-        id: user.id, fullname: user.fullname, username: user.username,
-        email: user.email, phone: user.phone, address: user.address, role: user.role
-      }
-    });
-  } catch (err) {
-    console.error(`[LOGIN ERROR] ${err.message}`);
-    res.status(500).json({ error: "Login failed" });
-  }
-});
-
 app.get("/api/me", auth, async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -292,73 +169,6 @@ app.put("/api/me", auth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: "Failed to update profile" });
   }
-});
-
-app.put("/api/me", auth, async (req, res) => {
-  let { fullname, phone, address } = req.body;
-  fullname = sanitize(fullname);
-  phone    = sanitize(phone);
-  address  = sanitize(address);
-  try {
-    const { data, error } = await supabase.from("users")
-      .update({ fullname, phone, address })
-      .eq("id", req.user.id)
-      .select("id,fullname,username,email,phone,address,role,status").single();
-    if (error) throw error;
-    res.json({ message: "Profile updated!", user: data });
-  } catch (err) { res.status(500).json({ error: "Failed to update profile" }); }
-});
-
-// ============================================================
-// OTP / MFA (MOCK — no real SMS sent, code is logged to console)
-// Swap this block for a real SMS provider later if you upgrade.
-// ============================================================
-
-const otpStore = new Map(); // phone -> { code, expiresAt }
-
-function generateOtp() {
-  return String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
-}
-
-app.post("/api/otp/send", otpLimiter, async (req, res) => {
-  const phone = sanitize(req.body.phone);
-
-  if (!phone)
-    return res.status(400).json({ error: "Phone number required" });
-
-  const code = generateOtp();
-  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-  otpStore.set(phone, { code, expiresAt });
-
-  // 👇 Real SMS would be sent here. For now the code is just logged.
-  console.log(`\n[MOCK OTP] ${new Date().toISOString()} - Code for ${phone}: ${code}\n`);
-
-  res.json({ message: "Verification code sent (check server console — mock mode)" });
-});
-
-app.post("/api/otp/verify", otpLimiter, async (req, res) => {
-  const phone = sanitize(req.body.phone);
-  const code  = sanitize(req.body.code);
-
-  if (!phone || !code)
-    return res.status(400).json({ error: "Phone and code required" });
-
-  const record = otpStore.get(phone);
-
-  if (!record)
-    return res.status(400).json({ error: "No code was sent to this number" });
-
-  if (Date.now() > record.expiresAt) {
-    otpStore.delete(phone);
-    return res.status(400).json({ error: "Code has expired. Please request a new one." });
-  }
-
-  if (record.code !== code)
-    return res.status(400).json({ error: "Invalid code" });
-
-  otpStore.delete(phone); // one-time use
-  console.log(`[MOCK OTP] ${new Date().toISOString()} - ${phone} verified`);
-  res.json({ message: "Verified" });
 });
 
 // ============================================================
@@ -619,7 +429,7 @@ app.put("/api/orders/:id", auth, async (req, res) => {
   try {
     const { data: existingOrder, error: findErr } = await supabase
       .from("orders")
-      .select("id, user_id, status")
+      .select("id, user_id, status, delivery_status")
       .eq("id", req.params.id)
       .eq("user_id", req.user.id)
       .single();
@@ -628,7 +438,17 @@ app.put("/api/orders/:id", auth, async (req, res) => {
       return res.status(404).json({ error: "Order not found" });
 
     if (!["pending", "confirmed"].includes(existingOrder.status))
-      return res.status(400).json({ error: "This order can no longer be cancelled" });
+      if (
+        ["BOOKING", "BOOKED", "PICKED_UP", "DELIVERED"].includes(
+          existingOrder.delivery_status,
+        )
+      )
+        return res
+          .status(400)
+          .json({
+            error:
+              "A delivery is already booked for this order. Please contact the shop.",
+          });
 
     const { data: orderItems } = await supabase
       .from("order_items")
@@ -675,19 +495,6 @@ app.put("/api/orders/:id", auth, async (req, res) => {
 // ADMIN
 // ============================================================
 
-app.get("/api/admin/users", auth, adminOnly, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id,fullname,username,phone,address,role,status,created_at")
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch users" });
-  }
-});
-
 app.get("/api/admin/stats", auth, adminOnly, async (req, res) => {
   try {
     const [p, u, o, ls] = await Promise.all([
@@ -709,21 +516,6 @@ app.get("/api/admin/stats", auth, adminOnly, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch stats" });
-  }
-});
-
-app.get("/api/admin/orders", auth, adminOnly, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from("orders")
-      .select(
-        "*, profiles(id,fullname,username), order_items(*, products(title))",
-      )
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch orders" });
   }
 });
 
@@ -764,151 +556,9 @@ app.put("/api/admin/orders/:id", auth, adminOnly, async (req, res) => {
 });
 
 // ============================================================
-// PAYMENTS (manual GCash/Maya proof + admin verification)
+// Payment and admin-list endpoints are registered in routes/Payments.cjs.
 // ============================================================
-
-// Customer submits payment method + reference + proof screenshot
-// Expects: { payment_method: "GCASH"|"MAYA", payment_reference: string, proof_base64: "data:image/...;base64,...." }
-app.put("/api/orders/:id/payment", auth, async (req, res) => {
-  const { payment_method, payment_reference, proof_base64 } = req.body;
-
-  if (!["GCASH", "MAYA"].includes(payment_method))
-    return res.status(400).json({ error: "payment_method must be GCASH or MAYA" });
-
-  const reference = sanitize(payment_reference);
-  if (!reference)
-    return res.status(400).json({ error: "Payment reference is required" });
-
-  if (!proof_base64 || !proof_base64.startsWith("data:image/"))
-    return res.status(400).json({ error: "A valid payment proof image is required" });
-
-  try {
-    // Confirm the order exists, belongs to this user, and is in a state that accepts payment
-    const { data: order, error: findErr } = await supabase
-      .from("orders")
-      .select("id, user_id, payment_status")
-      .eq("id", req.params.id)
-      .eq("user_id", req.user.id)
-      .single();
-
-    if (findErr || !order)
-      return res.status(404).json({ error: "Order not found" });
-
-    if (!["PENDING", "REJECTED"].includes(order.payment_status))
-      return res.status(400).json({ error: "This order is not awaiting payment" });
-
-    // Parse the data URI: "data:image/jpeg;base64,AAAA..."
-    const match = proof_base64.match(/^data:(image\/\w+);base64,(.+)$/);
-    if (!match)
-      return res.status(400).json({ error: "Invalid image data" });
-
-    const mimeType = match[1];
-    const ext = mimeType.split("/")[1] || "jpg";
-    const buffer = Buffer.from(match[2], "base64");
-
-    if (buffer.length > 8 * 1024 * 1024)
-      return res.status(400).json({ error: "Image too large (max 8MB)" });
-
-    const storagePath = `${req.user.id}/${order.id}/${Date.now()}.${ext}`;
-
-    const { error: uploadErr } = await supabase.storage
-      .from("payment-proofs")
-      .upload(storagePath, buffer, { contentType: mimeType, upsert: true });
-
-    if (uploadErr) throw uploadErr;
-
-    const { data: updated, error: updateErr } = await supabase
-      .from("orders")
-      .update({
-        payment_method: payment_method,
-        payment_reference: reference,
-        payment_proof_url: storagePath,
-        payment_status: "PENDING_VERIFICATION",
-      })
-      .eq("id", order.id)
-      .eq("user_id", req.user.id)
-      .select()
-      .single();
-
-    if (updateErr) throw updateErr;
-
-    console.log(`[PAYMENT SUBMITTED] ${new Date().toISOString()} - Order ${order.id} by user ${req.user.id}`);
-    res.json({ message: "Payment proof submitted! Waiting for admin verification.", order: updated });
-  } catch (err) {
-    console.error(`[PAYMENT SUBMIT ERROR] ${err.message}`);
-    res.status(500).json({ error: "Failed to submit payment proof" });
-  }
-});
-
-// Admin: list orders awaiting payment verification
-app.get("/api/admin/payments/pending", auth, adminOnly, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*, users(id, fullname, email, username)")
-      .eq("payment_status", "PENDING_VERIFICATION")
-      .order("updated_at", { ascending: true });
-    if (error) throw error;
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch pending payments" });
-  }
-});
-
-// Admin: get a short-lived signed URL to view a specific order's proof image
-app.get("/api/admin/orders/:id/payment-proof", auth, adminOnly, async (req, res) => {
-  try {
-    const { data: order, error: findErr } = await supabase
-      .from("orders").select("payment_proof_url").eq("id", req.params.id).single();
-    if (findErr || !order?.payment_proof_url)
-      return res.status(404).json({ error: "No payment proof on this order" });
-
-    const { data, error } = await supabase.storage
-      .from("payment-proofs")
-      .createSignedUrl(order.payment_proof_url, 300); // 5 minutes
-    if (error) throw error;
-
-    res.json({ url: data.signedUrl });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to load payment proof" });
-  }
-});
-
-// Admin: approve or reject a pending payment
-app.put("/api/admin/orders/:id/verify-payment", auth, adminOnly, async (req, res) => {
-  const { decision } = req.body; // "approve" | "reject"
-  if (!["approve", "reject"].includes(decision))
-    return res.status(400).json({ error: "decision must be 'approve' or 'reject'" });
-
-  try {
-    const { data: order, error: findErr } = await supabase
-      .from("orders").select("id, payment_status").eq("id", req.params.id).single();
-    if (findErr || !order)
-      return res.status(404).json({ error: "Order not found" });
-
-    if (order.payment_status !== "PENDING_VERIFICATION")
-      return res.status(400).json({ error: "This order is not awaiting verification" });
-
-    const newStatus = decision === "approve" ? "PAID" : "REJECTED";
-
-    const { data: updated, error: updateErr } = await supabase
-      .from("orders")
-      .update({ payment_status: newStatus })
-      .eq("id", req.params.id)
-      .select()
-      .single();
-    if (updateErr) throw updateErr;
-
-    console.log(`[PAYMENT ${newStatus}] ${new Date().toISOString()} - Order ${req.params.id} by admin ${req.user.id}`);
-    res.json({ message: `Payment ${newStatus}!`, order: updated });
-    // NOTE: Lalamove booking trigger gets added here in Phase 4, only when newStatus === "PAID"
-  } catch (err) {
-    res.status(500).json({ error: "Failed to update payment status" });
-  }
-});
-
-
-
+require("./routes/Payments.cjs")(app, { supabase, auth, adminOnly, sanitize });
 app.get("/api/admin/users/:id/orders", auth, adminOnly, async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -958,10 +608,9 @@ app.listen(PORT, () => {
   console.log(`\n✅  FITCHEQUE backend (SECURED) running → http://localhost:${PORT}\n`);
   console.log("  Security features active:");
   console.log("  ✅ Helmet (CSP, X-Frame-Options, X-Content-Type-Options, HSTS)");
-  console.log("  ✅ Rate limiting (10 auth / 100 api requests per 15min)");
+  console.log("  ✅ Rate limiting (100 API requests per 15min)");
   console.log("  ✅ CORS restricted to allowed origins");
   console.log("  ✅ Input sanitization on all user inputs");
   console.log("  ✅ Morgan request logging");
-  console.log("  ✅ Timing-safe login (dummy bcrypt compare)");
   console.log("  ✅ Generic error messages (no stack trace leaks)\n");
 });
