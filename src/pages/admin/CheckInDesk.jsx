@@ -42,8 +42,13 @@ export default function CheckInDesk() {
   return (
     <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
       <div style={{ marginBottom: 24 }}>
+<<<<<<< HEAD
         <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 900, color: "#1a1a1a", margin: "0 0 4px" }}>{"User's Transactions"}</h1>
         <p style={{ color: "#aaa", fontSize: 13 }}>Look up users and their transaction history</p>
+=======
+        <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 900, color: "#1a1a1a", margin: "0 0 4px" }}>Customer Check-In Desk</h1>
+        <p style={{ color: "#aaa", fontSize: 13 }}>Look up customers and their order history</p>
+>>>>>>> 2eb49b0790ed5f45d4026326eb08152bacfcb87c
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 20 }}>
@@ -137,4 +142,8 @@ export default function CheckInDesk() {
       </div>
     </div>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 2eb49b0790ed5f45d4026326eb08152bacfcb87c

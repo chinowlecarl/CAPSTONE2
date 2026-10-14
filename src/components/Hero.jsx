@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useState, useEffect } from "react";
 import { fmt, salePrice } from "../utils/api";
 
@@ -46,6 +47,28 @@ export function Hero({ featured, setPage }) {
                   src={p.image_url}
                   alt={p.title}
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+=======
+import { fmt, salePrice } from "../utils/api";
+
+export function Hero({ featured, setPage }) {
+  return (
+    <section style={{
+      background: "linear-gradient(135deg, #fff0f6 0%, #fce7f3 50%, #fbcfe8 100%)",
+      padding: "40px 24px 32px",
+    }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        {featured.length > 0 ? (
+          <div style={{
+            display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 4, borderRadius: 12, overflow: "hidden", height: 280,
+          }}>
+            {featured.slice(0, 4).map((p) => (
+              <div key={p.id} style={{ position: "relative", overflow: "hidden" }}>
+                <img
+                  src={p.image_url}
+                  alt={p.title}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+>>>>>>> 2eb49b0790ed5f45d4026326eb08152bacfcb87c
                   onError={(e) =>
                     (e.target.src = "https://via.placeholder.com/300x280/fce7f3/be185d?text=FITCHEQUE")
                   }
@@ -65,14 +88,22 @@ export function Hero({ featured, setPage }) {
           </div>
         ) : (
           <div style={{
+<<<<<<< HEAD
             height: isMobile ? 180 : 280,
+=======
+            height: 280,
+>>>>>>> 2eb49b0790ed5f45d4026326eb08152bacfcb87c
             background: "linear-gradient(135deg, #fce7f3, #f9a8d4)",
             borderRadius: 12,
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
             <div style={{
+<<<<<<< HEAD
               fontFamily: "'Playfair Display', serif",
               fontSize: isMobile ? 32 : 48,
+=======
+              fontFamily: "'Playfair Display', serif", fontSize: 48,
+>>>>>>> 2eb49b0790ed5f45d4026326eb08152bacfcb87c
               fontWeight: 900, color: "#be185d", letterSpacing: 4,
             }}>
               FITCHEQUE
@@ -82,4 +113,8 @@ export function Hero({ featured, setPage }) {
       </div>
     </section>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 2eb49b0790ed5f45d4026326eb08152bacfcb87c

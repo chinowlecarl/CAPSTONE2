@@ -7,6 +7,7 @@
   padding: 0;
 }
 
+<<<<<<< HEAD
 html, body, #root {
   width: 100%;
   max-width: 100%;
@@ -20,6 +21,8 @@ img {
   max-width: 100%;
 }
 
+=======
+>>>>>>> 2eb49b0790ed5f45d4026326eb08152bacfcb87c
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -31,4 +34,8 @@ img {
 
 ::-webkit-scrollbar       { width: 6px; }
 ::-webkit-scrollbar-track { background: #fff5f7; }
+<<<<<<< HEAD
 ::-webkit-scrollbar-thumb { background: #f9a8d4; border-radius: 3px; }
+=======
+::-webkit-scrollbar-thumb { background: #f9a8d4; border-radius: 3px; }
+>>>>>>> 2eb49b0790ed5f45d4026326eb08152bacfcb87c
