@@ -1,23 +1,51 @@
+import { useState, useEffect } from "react";
 import { fmt, salePrice } from "../utils/api";
 
+function useIsMobile(breakpoint = 600) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= breakpoint);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= breakpoint);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+
+  return isMobile;
+}
+
 export function Hero({ featured, setPage }) {
+  const isMobile = useIsMobile();
+
   return (
     <section style={{
       background: "linear-gradient(135deg, #fff0f6 0%, #fce7f3 50%, #fbcfe8 100%)",
-      padding: "40px 24px 32px",
+      padding: isMobile ? "20px 12px 20px" : "40px 24px 32px",
+      width: "100%",
+      boxSizing: "border-box",
     }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%" }}>
         {featured.length > 0 ? (
           <div style={{
-            display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 4, borderRadius: 12, overflow: "hidden", height: 280,
+            display: "grid",
+            gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)",
+            gap: isMobile ? 6 : 4,
+            borderRadius: 12,
+            overflow: "hidden",
+            height: isMobile ? "auto" : 280,
           }}>
             {featured.slice(0, 4).map((p) => (
-              <div key={p.id} style={{ position: "relative", overflow: "hidden" }}>
+              <div
+                key={p.id}
+                style={{
+                  position: "relative",
+                  overflow: "hidden",
+                  height: isMobile ? 200 : "100%",
+                }}
+              >
                 <img
                   src={p.image_url}
                   alt={p.title}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                   onError={(e) =>
                     (e.target.src = "https://via.placeholder.com/300x280/fce7f3/be185d?text=FITCHEQUE")
                   }
@@ -37,13 +65,14 @@ export function Hero({ featured, setPage }) {
           </div>
         ) : (
           <div style={{
-            height: 280,
+            height: isMobile ? 180 : 280,
             background: "linear-gradient(135deg, #fce7f3, #f9a8d4)",
             borderRadius: 12,
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
             <div style={{
-              fontFamily: "'Playfair Display', serif", fontSize: 48,
+              fontFamily: "'Playfair Display', serif",
+              fontSize: isMobile ? 32 : 48,
               fontWeight: 900, color: "#be185d", letterSpacing: 4,
             }}>
               FITCHEQUE

@@ -3,10 +3,23 @@ import { apiFetch } from "../utils/api";
 import { Hero } from "../components/Hero";
 import { Card } from "../components/Card";
 
+function useIsMobile(breakpoint = 600) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" && window.innerWidth <= breakpoint
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= breakpoint);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 export default function Home({ setPage }) {
   const [featured, setFeatured] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     Promise.all([apiFetch("/products/featured"), apiFetch("/products")])
@@ -21,15 +34,17 @@ export default function Home({ setPage }) {
     </div>
   );
 
+  const sidePad = isMobile ? "0 12px" : "0 24px";
+
   return (
-    <div style={{ background: "#fff" }}>
+    <div style={{ background: "#fff", width: "100%", overflowX: "hidden" }}>
       <Hero featured={featured} setPage={setPage} />
 
       {/* New Arrivals */}
-      <section style={{ background: "#fff5f7", padding: "40px 0" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
+      <section style={{ background: "#fff5f7", padding: isMobile ? "28px 0" : "40px 0" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: sidePad }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 900, color: "#1a1a1a", margin: 0, letterSpacing: 1 }}>NEW ARRIVALS</h2>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: isMobile ? 18 : 22, fontWeight: 900, color: "#1a1a1a", margin: 0, letterSpacing: 1 }}>NEW ARRIVALS</h2>
             <button onClick={() => setPage("products")} style={{ background: "none", border: "1px solid #be185d", color: "#be185d", borderRadius: 20, padding: "6px 18px", fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer" }}>VIEW ALL</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
@@ -40,7 +55,12 @@ export default function Home({ setPage }) {
 
       {/* Features Strip */}
       <section style={{ background: "#be185d", padding: "20px 0" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, textAlign: "center" }}>
+        <div style={{
+          maxWidth: 1200, margin: "0 auto", padding: sidePad,
+          display: "grid",
+          gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)",
+          gap: 16, textAlign: "center",
+        }}>
           {[
             ["🚚", "FREE SHIPPING", "Orders over ₱500"],
             ["↩", "30-DAY RETURNS", "Easy return policy"],

@@ -11,7 +11,7 @@ const TABS = [
   { id: "add",      label: "➕ Add Product",  icon: "➕" },
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
-  { id: "checkin",  label: "🔍 Check-In",     icon: "🔍" },
+  { id: "checkin",  label: "🔍 User's Transactions", icon: "🔍" },
 ];
 
 export default function AdminHome({ setPage }) {
