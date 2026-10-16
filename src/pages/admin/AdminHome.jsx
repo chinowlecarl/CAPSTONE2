@@ -1,19 +1,20 @@
 import { useState } from "react";
 import { useApp } from "../../context/AppContext";
-import ManageProducts from "./ManageProducts";
-import ManageEvents   from "./ManageEvents";
-import CheckInDesk    from "./CheckInDesk";
-import CreateEvent    from "./CreateEvent";
-import EventDetails   from "./EventDetails";
-import PaymentVerification from "./PaymentVerification";
+import ManageProducts from "../ManageProducts";
+import ManageEvents   from "../ManageEvents";
+import CheckInDesk    from "../CheckInDesk";
+import CreateEvent    from "../CreateEvent";
+import EventDetails   from "../EventDetails";
+import SalesInsights from "./SalesInsights";                      // with the other imports                         // with the other tab lines
 
 const TABS = [
   { id: "products", label: "📦 Products",     icon: "📦" },
   { id: "add",      label: "➕ Add Product",  icon: "➕" },
+  { id: "insights", label: "📈 Insights", icon: "📈" }, 
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
-  { id: "payments", label: "💳 Payments",     icon: "💳" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
   { id: "checkin",  label: "🔍 Check-In",     icon: "🔍" },
+  { id: "insights", label: "📈 Insights", icon: "📈" },
 ];
 
 export default function AdminHome({ setPage }) {
@@ -63,9 +64,9 @@ export default function AdminHome({ setPage }) {
         {tab === "products" && <ManageProducts setPage={setPage} />}
         {tab === "add"      && <CreateEvent    setPage={setPage} />}
         {tab === "orders"   && <ManageEvents   setPage={setPage} />}
-        {tab === "payments" && <PaymentVerification />}
         {tab === "users"    && <EventDetails   setPage={setPage} />}
         {tab === "checkin"  && <CheckInDesk    setPage={setPage} />}
+        {tab === "insights" && <SalesInsights />}
       </div>
     </div>
   );

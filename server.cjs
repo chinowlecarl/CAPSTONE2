@@ -558,7 +558,7 @@ app.put("/api/admin/orders/:id", auth, adminOnly, async (req, res) => {
 // ============================================================
 // Payment and admin-list endpoints are registered in routes/Payments.cjs.
 // ============================================================
-require("./routes/Payments.cjs")(app, { supabase, auth, adminOnly, sanitize });
+require("./routes/payments.cjs")(app, { supabase, auth, adminOnly, sanitize });
    require("./routes/insights.cjs")(app, { supabase, auth, adminOnly });
 app.get("/api/admin/users/:id/orders", auth, adminOnly, async (req, res) => {
   try {
