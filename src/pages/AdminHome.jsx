@@ -5,13 +5,16 @@ import ManageEvents   from "../ManageEvents";
 import CheckInDesk    from "../CheckInDesk";
 import CreateEvent    from "../CreateEvent";
 import EventDetails   from "../EventDetails";
+import SalesInsights from "./SalesInsights";                      // with the other imports                         // with the other tab lines
 
 const TABS = [
   { id: "products", label: "📦 Products",     icon: "📦" },
   { id: "add",      label: "➕ Add Product",  icon: "➕" },
+  { id: "insights", label: "📈 Insights", icon: "📈" }, 
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
   { id: "checkin",  label: "🔍 Check-In",     icon: "🔍" },
+  { id: "insights", label: "📈 Insights", icon: "📈" },
 ];
 
 export default function AdminHome({ setPage }) {
@@ -63,6 +66,7 @@ export default function AdminHome({ setPage }) {
         {tab === "orders"   && <ManageEvents   setPage={setPage} />}
         {tab === "users"    && <EventDetails   setPage={setPage} />}
         {tab === "checkin"  && <CheckInDesk    setPage={setPage} />}
+        {tab === "insights" && <SalesInsights />}
       </div>
     </div>
   );
