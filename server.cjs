@@ -951,6 +951,8 @@ app.put("/api/admin/users/:id/status", auth, adminOnly, async(req, res) => {
     }
 });
 
+require("./routes/behavior.cjs")(app, { supabase, auth, adminOnly });
+
 app.use((req, res) => {
     res.status(404).json({ error: "Route not found" });
 });

@@ -5,23 +5,15 @@ import ManageEvents   from "./ManageEvents";
 import CheckInDesk    from "./CheckInDesk";
 import CreateEvent    from "./CreateEvent";
 import EventDetails   from "./EventDetails";
-<<<<<<< HEAD
-=======
-import PaymentVerification from "./PaymentVerification";
->>>>>>> 2eb49b0790ed5f45d4026326eb08152bacfcb87c
+import CustomerBehavior from "./CustomerBehavior";
 
 const TABS = [
   { id: "products", label: "📦 Products",     icon: "📦" },
   { id: "add",      label: "➕ Add Product",  icon: "➕" },
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
-<<<<<<< HEAD
-  { id: "users",    label: "👥 Users",         icon: "👥" },
-  { id: "checkin",  label: "🔍 User's Transactions", icon: "🔍" },
-=======
-  { id: "payments", label: "💳 Payments",     icon: "💳" },
+  { id: "behavior", label: "👥 Customer Behavior", icon: "👥" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
   { id: "checkin",  label: "🔍 Check-In",     icon: "🔍" },
->>>>>>> 2eb49b0790ed5f45d4026326eb08152bacfcb87c
 ];
 
 export default function AdminHome({ setPage }) {
@@ -71,10 +63,7 @@ export default function AdminHome({ setPage }) {
         {tab === "products" && <ManageProducts setPage={setPage} />}
         {tab === "add"      && <CreateEvent    setPage={setPage} />}
         {tab === "orders"   && <ManageEvents   setPage={setPage} />}
-<<<<<<< HEAD
-=======
-        {tab === "payments" && <PaymentVerification />}
->>>>>>> 2eb49b0790ed5f45d4026326eb08152bacfcb87c
+        {tab === "behavior" && <CustomerBehavior />}
         {tab === "users"    && <EventDetails   setPage={setPage} />}
         {tab === "checkin"  && <CheckInDesk    setPage={setPage} />}
       </div>
