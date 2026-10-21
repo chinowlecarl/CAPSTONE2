@@ -78,6 +78,16 @@ export function AppProvider({ children }) {
   }, [user?.id]);
 
   // ── AUTH ──────────────────────────────────────────────────
+  const reportActivity = async (action) => {
+    try {
+      await apiFetch("/activity/event", {
+        method: "POST",
+        body: JSON.stringify({ action }),
+      });
+    } catch (err) {
+      console.warn(`Could not record ${action.toLowerCase()} activity: ${err.message}`);
+    }
+  };
 
   // Step 1: password check + branch to the right second factor.
   // Returns one of:
@@ -103,10 +113,12 @@ export function AppProvider({ children }) {
         const totp = factors?.totp?.find((f) => f.status === "verified");
         if (!totp) {
           pendingChallengeRef.current = false;
+          await reportActivity("LOGIN");
           return { status: "ok" }; // admin has no factor enrolled yet — let through, nag elsewhere
         }
         return { status: "totp_required", factorId: totp.id };
       }
+      await reportActivity("LOGIN");
       return { status: "ok" };
     }
 
@@ -138,6 +150,7 @@ export function AppProvider({ children }) {
     pendingChallengeRef.current = false;
     const { data: { session } } = await supabase.auth.getSession();
     await loadProfileForSession(session);
+    await reportActivity("LOGIN");
     toast(`Welcome back! 🌸`, "success");
   };
 
@@ -147,6 +160,7 @@ export function AppProvider({ children }) {
 
     pendingChallengeRef.current = false;
     await loadProfileForSession(data.session);
+    await reportActivity("LOGIN");
     toast(`Welcome back! 🌸`, "success");
   };
 
@@ -159,6 +173,7 @@ export function AppProvider({ children }) {
   const completeLogin = () => {}; // kept for compatibility, no-op now (handled in verify* above)
 
   const logout = async () => {
+    if (user) await reportActivity("LOGOUT");
     await supabase.auth.signOut();
     setUser(null);
     setCart([]);

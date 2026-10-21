@@ -7,14 +7,18 @@ import CreateEvent    from "./CreateEvent";
 import EventDetails   from "./EventDetails";
 import SalesInsights from "./SalesInsights";
 import CustomerBehavior from "./CustomerBehavior";
+import ActivityLog from "./ActivityLog";
+import ArchivedProducts from "./ArchivedProducts";
 
 const TABS = [
   { id: "products", label: "📦 Products",     icon: "📦" },
+  { id: "archive",  label: "🗃 Archived",      icon: "🗃" },
   { id: "add",      label: "➕ Add Product",  icon: "➕" },
   { id: "insights", label: "📈 Insights", icon: "📈" }, 
   { id: "behavior", label: "👥 Customer Behavior", icon: "👥" },
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
+  { id: "activity", label: "🕒 Activity Log",  icon: "🕒" },
   { id: "checkin",  label: "🔍 Check-In",     icon: "🔍" },
 ];
 
@@ -63,12 +67,14 @@ export default function AdminHome({ setPage }) {
       {/* Tab content */}
       <div>
         {tab === "products" && <ManageProducts setPage={setPage} />}
+        {tab === "archive"  && <ArchivedProducts />}
         {tab === "add"      && <CreateEvent    setPage={setPage} />}
         {tab === "orders"   && <ManageEvents   setPage={setPage} />}
         {tab === "users"    && <EventDetails   setPage={setPage} />}
         {tab === "checkin"  && <CheckInDesk    setPage={setPage} />}
         {tab === "insights" && <SalesInsights  setPage={setPage} />}
         {tab === "behavior" && <CustomerBehavior />}
+        {tab === "activity" && <ActivityLog />}
       </div>
     </div>
   );
