@@ -186,10 +186,33 @@ export default function ManageProducts({ setPage }) {
     } catch (err) { showMsg(err.message, "error"); }
   };
 
+  // ✅ FIXED DELETE
   const del = async (id) => {
     if (!window.confirm("Delete this product?")) return;
-    try { await apiFetch(`/products/${id}`,{method:"DELETE"}); setProducts((ps)=>ps.filter((p)=>p.id!==id)); showMsg("Deleted!"); }
-    catch (err) { showMsg(err.message, "error"); }
+
+    const removeFromScreen = () => {
+      setProducts((ps) => ps.filter((p) => p.id !== id));
+      setStats((s) => ({ ...s, total_products: Math.max(0, (s.total_products || 0) - 1) }));
+      showMsg("Product deleted!");
+    };
+
+    try {
+      await apiFetch(`/products/${id}`, { method: "DELETE" });
+      removeFromScreen();
+    } catch (err) {
+      // The server may delete the row but send an empty reply that apiFetch can't parse,
+      // so check the list before showing an error.
+      try {
+        const fresh = await apiFetch("/products");
+        if (Array.isArray(fresh) && !fresh.some((p) => p.id === id)) {
+          removeFromScreen();
+        } else {
+          showMsg(err.message || "Could not delete this product.", "error");
+        }
+      } catch {
+        showMsg(err.message || "Could not delete this product.", "error");
+      }
+    }
   };
 
   const allCats = ["All", ...CATEGORIES];
