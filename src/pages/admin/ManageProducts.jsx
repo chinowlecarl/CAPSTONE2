@@ -83,16 +83,6 @@ function ImageSlot({ label, value, onChange, inputStyle }) {
               <div style={{ fontSize:11, color:"#aaa" }}>JPG, PNG, WEBP · max 5 MB</div>
             </div>
           )}
-          <ConfirmDialog
-            open={!!pendingDelete}
-            title="Remove item?"
-            message={pendingDelete ? `"${pendingDelete.title}" will be archived and hidden from the store. You can restore it within 10 days.` : ""}
-            confirmLabel="Archive item"
-            destructive
-            busy={deleting}
-            onCancel={() => setPendingDelete(null)}
-            onConfirm={del}
-          />
         </div>
         {value && !uploading && (
           <button
@@ -392,6 +382,17 @@ export default function ManageProducts({ setPage }) {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Remove item?"
+        message={pendingDelete ? `"${pendingDelete.title}" will be archived and hidden from the store. You can restore it within 10 days.` : ""}
+        confirmLabel="Archive item"
+        destructive
+        busy={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={del}
+      />
     </div>
   );
 }
