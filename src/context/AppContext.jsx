@@ -193,8 +193,16 @@ export function AppProvider({ children }) {
         },
       },
     });
-    if (error) throw new Error(error.message);
-    return data;
+   if (error) {
+  const m = error.message.toLowerCase();
+  if (m.includes("already registered")) throw new Error("That email is already taken. Try signing in instead.");
+  if (error.status === 429) throw new Error("Too many attempts. Please wait a minute and try again.");
+  throw new Error(error.message);
+}
+// Confirm-email ON: an existing email comes back with no error and no identities
+if (data.user && data.user.identities?.length === 0)
+  throw new Error("That email is already taken. Try signing in instead.");
+return data;
   };
 
   const completeRegister = () => {
