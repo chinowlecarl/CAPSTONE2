@@ -105,19 +105,11 @@ module.exports = function registerBehavior(app, { supabase, auth, adminOnly }) {
       carts = await fetchPaged(() =>
         supabase.from("cart_items").select("user_id,quantity,created_at,products(title,price,discount)").order("created_at", { ascending: true }),
       );
-    } catch (err) {
-      console.warn(
-        `[CUSTOMER INSIGHTS CARTS] Cart analysis unavailable: ${err?.message || err}`,
-      );
+    } catch (_) {
       carts = null;
     }
 
-    const names = new Map(
-      profiles.map((p) => {
-        const name = (p.fullname || p.username || "Customer").trim();
-        return [p.id, p.fullname ? name.split(/\s+/)[0] : name];
-      }),
-    );
+    const names = new Map(profiles.map((p) => [p.id, (p.fullname || p.username || "Customer").trim()]));
 
     // ── per-customer history ───────────────────────────────
     const byUser = new Map();
@@ -176,7 +168,7 @@ module.exports = function registerBehavior(app, { supabase, auth, adminOnly }) {
     const totalSpent = sum(buyers.map((b) => b.spent));
 
     const overview = {
-      buyersIn12Months: buyers.length,
+      buyersAllTime: buyers.length,
       activeBuyers,
       newBuyers: newBuyerIds.size,
       returningBuyers: returningBuyerIds.size,

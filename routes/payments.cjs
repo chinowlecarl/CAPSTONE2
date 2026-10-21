@@ -300,7 +300,7 @@ module.exports = function registerPaymentRoutes(
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "*, users:profiles(id,fullname,username), order_items(*, products(title))",
+          "*, users:profiles(id,fullname,username,status), order_items(*, products(title))",
         )
         .order("created_at", { ascending: false });
       if (error) throw error;

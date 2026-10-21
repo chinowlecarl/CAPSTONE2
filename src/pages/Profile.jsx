@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { apiFetch, fmt, salePrice } from "../utils/api";
 import { supabase } from "../utils/supabase";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 const STATUS_STYLES = {
   pending:   { bg: "#fef9c3", color: "#854d0e", label: "Pending" },
@@ -165,6 +166,7 @@ function SecurityTab({ toast }) {
   const [code, setCode]           = useState("");
   const [verifying, setVerifying] = useState(false);
   const [unenrolling, setUnenrolling] = useState(null);
+  const [confirmingFactor, setConfirmingFactor] = useState(null);
 
   const loadFactors = async () => {
     setLoading(true);
@@ -230,12 +232,18 @@ function SecurityTab({ toast }) {
   };
 
   const removeFactor = async (id) => {
-    if (!window.confirm("Disable two-factor authentication? This will remove admin AAL2 protection.")) return;
     setUnenrolling(id);
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: id });
-    if (error) toast(error.message, "error");
-    else { toast("Two-factor authentication disabled.", "info"); await loadFactors(); }
-    setUnenrolling(null);
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: id });
+      if (error) throw error;
+      toast("Two-factor authentication disabled.", "info");
+      setConfirmingFactor(null);
+      await loadFactors();
+    } catch (err) {
+      toast(err.message || "Failed to disable two-factor authentication.", "error");
+    } finally {
+      setUnenrolling(null);
+    }
   };
 
   const verifiedFactor = factors.find((f) => f.status === "verified");
@@ -248,6 +256,7 @@ function SecurityTab({ toast }) {
   );
 
   return (
+    <>
     <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #fce7f3", boxShadow: "0 2px 16px rgba(190,24,93,0.06)", padding: 24 }}>
       <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 900, color: "#1a1a1a", margin: "0 0 6px" }}>
         Two-Factor Authentication
@@ -267,7 +276,7 @@ function SecurityTab({ toast }) {
             </div>
           </div>
           <button
-            onClick={() => removeFactor(verifiedFactor.id)}
+            onClick={() => setConfirmingFactor(verifiedFactor.id)}
             disabled={unenrolling === verifiedFactor.id}
             style={{ background: "#fff", border: "1.5px solid #fecaca", color: "#ef4444", fontWeight: 700, fontSize: 12, padding: "10px 20px", borderRadius: 10, cursor: "pointer" }}
           >
@@ -325,6 +334,89 @@ function SecurityTab({ toast }) {
         </div>
       )}
     </div>
+    <ConfirmDialog
+      open={!!confirmingFactor}
+      title="Disable two-factor authentication?"
+      message="This will remove the additional authenticator protection from your account."
+      confirmLabel="Disable 2FA"
+      destructive
+      busy={!!unenrolling}
+      onCancel={() => setConfirmingFactor(null)}
+      onConfirm={() => removeFactor(confirmingFactor)}
+    />
+    </>
+  );
+}
+
+function PasswordChangeForm() {
+  const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState(null);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setNotice(null);
+    if (form.newPassword !== form.confirmPassword) {
+      setNotice({ type: "error", text: "The new passwords do not match." });
+      return;
+    }
+    if (form.newPassword === form.currentPassword) {
+      setNotice({ type: "error", text: "Your new password must be different from the current password." });
+      return;
+    }
+    if (new TextEncoder().encode(form.newPassword).length > 72) {
+      setNotice({ type: "error", text: "New password must be 72 bytes or fewer." });
+      return;
+    }
+    if (form.newPassword.length < 8 || !/[A-Z]/.test(form.newPassword) || !/[0-9]/.test(form.newPassword)) {
+      setNotice({ type: "error", text: "New password must be at least 8 characters and include an uppercase letter and a number." });
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await apiFetch("/account/change-password", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword: form.currentPassword, newPassword: form.newPassword }),
+      });
+      setForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      setNotice({ type: "success", text: result.message || "Password changed successfully." });
+    } catch (err) {
+      setNotice({ type: "error", text: err.message || "Failed to change password." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fields = [
+    ["Current password", "currentPassword", "current-password"],
+    ["New password", "newPassword", "new-password"],
+    ["Confirm new password", "confirmPassword", "new-password"],
+  ];
+
+  return (
+    <section style={{ background: "#fff", border: "1px solid #fce7f3", borderRadius: 16, padding: 24, boxShadow: "0 2px 16px rgba(190,24,93,.06)" }}>
+      <h3 style={{ margin: "0 0 6px", fontFamily: "'Playfair Display',serif", fontSize: 18 }}>Change Password</h3>
+      <p style={{ margin: "0 0 18px", color: "#888", fontSize: 13 }}>Use at least 8 characters, including an uppercase letter and a number.</p>
+      <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
+        {fields.map(([label, key, autoComplete]) => (
+          <label key={key} style={{ display: "grid", gap: 6, color: "#666", fontSize: 12, fontWeight: 700 }}>
+            {label}
+            <input
+              type="password"
+              autoComplete={autoComplete}
+              value={form[key]}
+              onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
+              required
+              style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #fce7f3", borderRadius: 9, background: "#fff8fb", boxSizing: "border-box" }}
+            />
+          </label>
+        ))}
+        {notice && <p role={notice.type === "error" ? "alert" : "status"} style={{ margin: 0, color: notice.type === "error" ? "#b91c1c" : "#15803d", fontSize: 13 }}>{notice.text}</p>}
+        <button type="submit" disabled={busy} style={{ justifySelf: "start", padding: "11px 20px", border: 0, borderRadius: 9, background: "linear-gradient(135deg,#f9a8d4,#be185d)", color: "#fff", fontWeight: 800 }}>
+          {busy ? "CHANGING..." : "CHANGE PASSWORD"}
+        </button>
+      </form>
+    </section>
   );
 }
 
@@ -344,6 +436,7 @@ export default function Profile({ setPage }) {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError]     = useState(null);
   const [cancellingId, setCancellingId]   = useState(null);
+  const [pendingCancel, setPendingCancel] = useState(null);
 
   useEffect(() => {
     if (activeTab === "orders" && user) {
@@ -370,8 +463,14 @@ export default function Profile({ setPage }) {
     setLoading(false);
   };
 
-  const cancelOrder = async (orderId) => {
-    if (!window.confirm("Cancel this order? This cannot be undone.")) return;
+  const cancelOrder = (orderId) => {
+    const order = orders.find((item) => item.id === orderId);
+    if (order) setPendingCancel(order);
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!pendingCancel) return;
+    const orderId = pendingCancel.id;
     setCancellingId(orderId);
     try {
       await apiFetch(`/orders/${orderId}`, {
@@ -380,10 +479,11 @@ export default function Profile({ setPage }) {
       });
       setOrders((os) => os.map((o) => o.id === orderId ? { ...o, status: "cancelled" } : o));
       toast("Order cancelled.", "success");
+      setPendingCancel(null);
     } catch (err) {
       toast(err.message || "Failed to cancel order", "error");
     }
-    setCancellingId(null);
+    finally { setCancellingId(null); }
   };
 
   const tabStyle = (tab) => ({
@@ -521,7 +621,22 @@ export default function Profile({ setPage }) {
 
       </div>
       {/* ── SECURITY TAB ── */}
-{activeTab === "security" && <SecurityTab toast={toast} />}
+{activeTab === "security" && (
+  <div style={{ display: "grid", gap: 16 }}>
+    <PasswordChangeForm />
+    <SecurityTab toast={toast} />
+  </div>
+)}
+      <ConfirmDialog
+        open={!!pendingCancel}
+        title="Cancel this order?"
+        message={pendingCancel ? `Cancel order #${pendingCancel.id.slice(0, 8).toUpperCase()}? This cannot be undone.` : ""}
+        confirmLabel="Cancel order"
+        destructive
+        busy={!!cancellingId}
+        onCancel={() => setPendingCancel(null)}
+        onConfirm={confirmCancelOrder}
+      />
     </div>
   );
 }
