@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { apiFetch, fmt } from "../../utils/api";
 import { supabase } from "../../utils/supabase";
 import { useApp } from "../../context/AppContext";
+import ConfirmDialog from "../../components/ConfirmDialog";
 
 const FILTERS = [
   { id: "verify",   label: "To verify",     test: (o) => o.payment_status === "PENDING_VERIFICATION" },
@@ -58,6 +59,7 @@ export default function PaymentVerification() {
   const [busyId, setBusyId]   = useState(null);
   const [msg, setMsg]         = useState(null);
   const [proof, setProof]     = useState(null); // { orderId, url }
+  const [pendingDecision, setPendingDecision] = useState(null);
 
   const showMsg = (text, type = "success") => {
     setMsg({ text, type });
@@ -88,13 +90,12 @@ export default function PaymentVerification() {
     setBusyId(null);
   };
 
-  const verify = async (order, decision) => {
-    const approve = decision === "approve";
-    const text = approve
-      ? `Approve the ${order.payment_method} payment of ${fmt(order.total_amount)}?\n\nOnly approve after you checked the real transaction in the ${order.payment_method} app.\nReference given by customer: ${order.payment_reference}\n\nApproving will also book the Lalamove delivery.`
-      : `Reject this payment? The customer will be able to upload a new proof.`;
-    if (!window.confirm(text)) return;
+  const verify = (order, decision) => setPendingDecision({ order, decision });
 
+  const confirmVerify = async () => {
+    if (!pendingDecision) return;
+    const { order, decision } = pendingDecision;
+    const approve = decision === "approve";
     setBusyId(order.id);
     try {
       await apiFetch(`/admin/orders/${order.id}/verify-payment`, { method: "PUT", body: JSON.stringify({ decision }) });
@@ -113,6 +114,7 @@ export default function PaymentVerification() {
     }
     await load();
     setBusyId(null);
+    setPendingDecision(null);
   };
 
   const book = async (order) => {
@@ -262,6 +264,18 @@ export default function PaymentVerification() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={!!pendingDecision}
+        title={pendingDecision?.decision === "approve" ? "Approve this payment?" : "Reject this payment?"}
+        message={pendingDecision?.decision === "approve"
+          ? `Approve ${pendingDecision.order.payment_method} payment of ${fmt(pendingDecision.order.total_amount)}? Confirm the transaction in the payment provider first. This will also book delivery. Reference: ${pendingDecision.order.payment_reference || "not provided"}.`
+          : "Reject this payment? The customer will be able to upload a new proof."}
+        confirmLabel={pendingDecision?.decision === "approve" ? "Approve & book" : "Reject payment"}
+        destructive={pendingDecision?.decision === "reject"}
+        busy={!!busyId}
+        onCancel={() => setPendingDecision(null)}
+        onConfirm={confirmVerify}
+      />
     </div>
   );
 }

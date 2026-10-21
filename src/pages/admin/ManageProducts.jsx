@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { apiFetch, fmt, salePrice } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
+import ConfirmDialog from "../../components/ConfirmDialog";
 
 const CATEGORIES = ["Tops","Bottoms","Dresses","Jackets","Accessories"];
 
@@ -82,6 +83,16 @@ function ImageSlot({ label, value, onChange, inputStyle }) {
               <div style={{ fontSize:11, color:"#aaa" }}>JPG, PNG, WEBP · max 5 MB</div>
             </div>
           )}
+          <ConfirmDialog
+            open={!!pendingDelete}
+            title="Remove item?"
+            message={pendingDelete ? `"${pendingDelete.title}" will be archived and hidden from the store. You can restore it within 10 days.` : ""}
+            confirmLabel="Archive item"
+            destructive
+            busy={deleting}
+            onCancel={() => setPendingDelete(null)}
+            onConfirm={del}
+          />
         </div>
         {value && !uploading && (
           <button
@@ -115,6 +126,8 @@ export default function ManageProducts({ setPage }) {
   const [msg, setMsg]           = useState(null);
   const [search, setSearch]     = useState("");
   const [catFilter, setCatFilter] = useState("All");
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [form, setForm] = useState({
     title:"", description:"", price:"", discount:"0", category:"", stock:"1",
@@ -186,10 +199,19 @@ export default function ManageProducts({ setPage }) {
     } catch (err) { showMsg(err.message, "error"); }
   };
 
-  const del = async (id) => {
-    if (!window.confirm("Delete this product?")) return;
-    try { await apiFetch(`/products/${id}`,{method:"DELETE"}); setProducts((ps)=>ps.filter((p)=>p.id!==id)); showMsg("Deleted!"); }
-    catch (err) { showMsg(err.message, "error"); }
+  const del = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/products/${pendingDelete.id}`, { method: "DELETE" });
+      setProducts((ps) => ps.filter((p) => p.id !== pendingDelete.id));
+      showMsg("Product archived. It can be restored for 10 days.");
+      setPendingDelete(null);
+    } catch (err) {
+      showMsg(err.message, "error");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const allCats = ["All", ...CATEGORIES];
@@ -301,7 +323,7 @@ export default function ManageProducts({ setPage }) {
                     <td style={{ padding:"18px 14px" }}>
                       <div style={{ display:"flex", gap:6 }}>
                         <button onClick={()=>openEdit(p)} style={{ background:"#eff6ff", border:"1px solid #bfdbfe", color:"#3b82f6", fontSize:11, fontWeight:700, padding:"5px 12px", borderRadius:8, cursor:"pointer" }}>Edit</button>
-                        <button onClick={()=>del(p.id)} style={{ background:"#fff5f7", border:"1px solid #fce7f3", color:"#be185d", fontSize:11, fontWeight:700, padding:"5px 12px", borderRadius:8, cursor:"pointer" }}>Delete</button>
+                        <button onClick={() => setPendingDelete(p)} style={{ background:"#fff5f7", border:"1px solid #fce7f3", color:"#be185d", fontSize:11, fontWeight:700, padding:"5px 12px", borderRadius:8, cursor:"pointer" }}>Remove Item</button>
                       </div>
                     </td>
                   </tr>

@@ -130,6 +130,16 @@ function adminOnly(req, res, next) {
   next();
 }
 
+const activityLog = require("./routes/activity.cjs")(app, { supabase, auth, adminOnly });
+require("./routes/archive.cjs")(app, { supabase, auth, adminOnly, log: activityLog });
+require("./routes/account.cjs")(app, {
+  supabase,
+  auth,
+  supabaseUrl: SUPABASE_URL,
+  verifyKey: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || SUPABASE_KEY,
+  log: activityLog,
+});
+
 app.get("/", (req, res) => {
   res.json({ message: "FITCHEQUE API is running!", status: "ok" });
 });
@@ -179,6 +189,7 @@ app.get("/api/products", async (req, res) => {
   const { category, search } = req.query;
   try {
     let q = supabase.from("products").select("*")
+      .is("archived_at", null)
       .order("created_at", { ascending: false });
     if (category && category !== "All") q = q.eq("category", sanitize(category));
     if (search) q = q.or(`title.ilike.%${sanitize(search)}%,description.ilike.%${sanitize(search)}%`);
@@ -195,11 +206,13 @@ app.get("/api/products/featured", async (req, res) => {
   try {
     const { data, error } = await supabase.from("products").select("*")
       .eq("featured", true)
+      .is("archived_at", null)
       .order("created_at", { ascending: false }).limit(8);
     if (error) throw error;
     if (!data || data.length === 0) {
       const { data: fallback, error: fallbackErr } = await supabase
         .from("products").select("*")
+        .is("archived_at", null)
         .order("created_at", { ascending: false }).limit(8);
       if (fallbackErr) throw fallbackErr;
       return res.json(fallback);
@@ -214,7 +227,7 @@ app.get("/api/products/featured", async (req, res) => {
 app.get("/api/products/:id", async (req, res) => {
   try {
     const { data, error } = await supabase.from("products").select("*")
-      .eq("id", req.params.id).single();
+      .eq("id", req.params.id).is("archived_at", null).single();
     if (error || !data) return res.status(404).json({ error: "Product not found" });
     res.json(data);
   } catch (err) { res.status(500).json({ error: "Failed to fetch product" }); }
@@ -273,14 +286,6 @@ app.put("/api/products/:id", auth, adminOnly, async (req, res) => {
   }
 });
 
-app.delete("/api/products/:id", auth, adminOnly, async (req, res) => {
-  try {
-    const { error } = await supabase.from("products").delete().eq("id", req.params.id);
-    if (error) throw error;
-    res.json({ message: "Product deleted!" });
-  } catch (err) { res.status(500).json({ error: "Failed to delete product" }); }
-});
-
 // ============================================================
 // CART
 // ============================================================
@@ -298,6 +303,10 @@ app.post("/api/cart", auth, async (req, res) => {
   const { product_id, quantity } = req.body;
   if (!product_id) return res.status(400).json({ error: "Product ID required" });
   try {
+    const { data: product, error: productErr } = await supabase.from("products")
+      .select("id").eq("id", product_id).is("archived_at", null).maybeSingle();
+    if (productErr) throw productErr;
+    if (!product) return res.status(404).json({ error: "This product is no longer available" });
     const { data: existing } = await supabase.from("cart_items").select("*")
       .eq("user_id", req.user.id).eq("product_id", product_id).maybeSingle();
     if (existing) {
@@ -498,13 +507,13 @@ app.put("/api/orders/:id", auth, async (req, res) => {
 app.get("/api/admin/stats", auth, adminOnly, async (req, res) => {
   try {
     const [p, u, o, ls] = await Promise.all([
-      supabase.from("products").select("id", { count: "exact" }),
+      supabase.from("products").select("id", { count: "exact" }).is("archived_at", null),
       supabase
         .from("profiles")
         .select("id", { count: "exact" })
         .eq("role", "customer"),
       supabase.from("orders").select("id,total_amount", { count: "exact" }),
-      supabase.from("products").select("id", { count: "exact" }).lt("stock", 5),
+      supabase.from("products").select("id", { count: "exact" }).is("archived_at", null).lt("stock", 5),
     ]);
     res.json({
       total_products: p.count || 0,
@@ -579,6 +588,8 @@ app.put("/api/admin/users/:id/status", auth, adminOnly, async (req, res) => {
   const { status } = req.body;
   if (!["active", "suspended"].includes(status))
     return res.status(400).json({ error: "Invalid status value" });
+  if (req.params.id === req.user.id)
+    return res.status(400).json({ error: "You cannot change your own account status" });
   try {
     const { data, error } = await supabase
       .from("profiles")
@@ -587,9 +598,6 @@ app.put("/api/admin/users/:id/status", auth, adminOnly, async (req, res) => {
       .select("id,fullname,username,role,status")
       .single();
     if (error) throw error;
-    console.log(
-      `[ADMIN] ${new Date().toISOString()} - User ${req.params.id} status → ${status}`,
-    );
     res.json({ message: "User status updated!", user: data });
   } catch (err) {
     res.status(500).json({ error: "Failed to update user status" });

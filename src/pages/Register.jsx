@@ -1,12 +1,42 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
+import { apiFetch } from "../utils/api";
 
 export default function Register({ setPage }) {
   const { registerUser, completeRegister } = useApp();
   const [form, setForm] = useState({ username: "", email: "", phone: "", password: "", confirm: "" });
   const [errors, setErrors] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState({ state: "idle", message: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const sf = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const username = form.username.trim();
+
+  useEffect(() => {
+    if (username.length < 3 || !/^[A-Za-z0-9_.]{3,20}$/.test(username)) {
+      setUsernameStatus({ state: "idle", message: "" });
+      return undefined;
+    }
+    let active = true;
+    const timer = setTimeout(() => {
+      setUsernameStatus({ state: "checking", message: "Checking username..." });
+      apiFetch(`/auth/username-available?username=${encodeURIComponent(username)}`)
+        .then((result) => {
+          if (active) setUsernameStatus({
+            state: result.available ? "available" : "taken",
+            message: result.available ? "Username is available" : "That username is already taken",
+          });
+        })
+        .catch((err) => {
+          if (active) setUsernameStatus({ state: "error", message: err.message || "Could not check username" });
+        });
+    }, 350);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [username]);
 
   const pw = form.password;
   const pwReqs = [
@@ -17,9 +47,9 @@ export default function Register({ setPage }) {
 
   const [registered, setRegistered] = useState(false);
 
-const handleSubmit = async () => {
+  const handleSubmit = async () => {
     const errs = [];
-    if (form.username.length < 3) errs.push("Username must be at least 3 characters");
+    if (!/^[A-Za-z0-9_.]{3,20}$/.test(username)) errs.push("Username must be 3-20 characters: letters, numbers, _ or .");
     if (!form.email.includes("@")) errs.push("Valid email is required");
     if (!/^[0-9]{10,15}$/.test(form.phone.replace(/\s/g, ""))) errs.push("Valid phone number is required");
     if (!pwReqs.every((r) => r.ok)) errs.push("Password does not meet requirements");
@@ -28,12 +58,19 @@ const handleSubmit = async () => {
     if (errs.length > 0) return;
     setLoading(true);
     try {
-      await registerUser(form);
+      const availability = await apiFetch(`/auth/username-available?username=${encodeURIComponent(username)}`);
+      if (!availability.available) throw new Error("That username is already taken");
+      await registerUser({ ...form, username });
       setRegistered(true);
     } catch (err) {
-      setErrors([err.message]);
+      const message = /duplicate|profiles_username_lower_idx|username/i.test(err.message || "")
+        ? "That username is already taken. Choose another username."
+        : err.message;
+      setErrors([message]);
+      if (/username/i.test(message)) setUsernameStatus({ state: "taken", message });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   if (registered) return (
@@ -86,15 +123,37 @@ const handleSubmit = async () => {
         {[["EMAIL", "email", "email"], ["USERNAME", "username", "text"], ["PHONE NUMBER", "phone", "tel"], ["PASSWORD", "password", "password"], ["CONFIRM PASSWORD", "confirm", "password"]].map(([label, key, type]) => (
           <div key={key} style={{ marginBottom: 14 }}>
             <label style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#888", letterSpacing: 1.5, marginBottom: 6 }}>{label}</label>
-            <input
-              type={type}
-              value={form[key]}
-              onChange={sf(key)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-              style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 13, outline: "none", background: "#fff5f7", boxSizing: "border-box" }}
-              onFocus={(e) => (e.target.style.borderColor = "#db2777")}
-              onBlur={(e) => (e.target.style.borderColor = "#fce7f3")}
-            />
+            <div style={{ position: "relative" }}>
+              <input
+                type={key === "password" ? (showPassword ? "text" : "password") : key === "confirm" ? (showConfirm ? "text" : "password") : type}
+                value={form[key]}
+                onChange={sf(key)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                autoComplete={key === "password" ? "new-password" : key === "confirm" ? "new-password" : undefined}
+                style={{ width: "100%", padding: "11px 48px 11px 14px", border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 13, outline: "none", background: "#fff5f7", boxSizing: "border-box" }}
+                onFocus={(e) => (e.target.style.borderColor = "#db2777")}
+                onBlur={(e) => (e.target.style.borderColor = "#fce7f3")}
+              />
+              {(key === "password" || key === "confirm") && (
+                <button
+                  type="button"
+                  aria-label={(key === "password" ? showPassword : showConfirm) ? "Hide password" : "Show password"}
+                  onClick={() => key === "password" ? setShowPassword((value) => !value) : setShowConfirm((value) => !value)}
+                  style={{ position: "absolute", top: "50%", right: 10, transform: "translateY(-50%)", border: 0, background: "transparent", color: "#be185d", fontSize: 12, fontWeight: 700 }}
+                >
+                  <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+                    <circle cx="12" cy="12" r="3" />
+                    {!(key === "password" ? showPassword : showConfirm) && <path d="m3 3 18 18" />}
+                  </svg>
+                </button>
+              )}
+            </div>
+            {key === "username" && usernameStatus.message && (
+              <p role={usernameStatus.state === "taken" || usernameStatus.state === "error" ? "alert" : "status"} style={{ fontSize: 11, margin: "4px 0 0", color: usernameStatus.state === "available" ? "#16a34a" : usernameStatus.state === "checking" ? "#888" : "#be185d", fontWeight: 600 }}>
+                {usernameStatus.message}
+              </p>
+            )}
             {key === "confirm" && form.confirm && (
               <p style={{ fontSize: 11, margin: "4px 0 0", color: form.password === form.confirm ? "#22c55e" : "#be185d", fontWeight: 600 }}>
                 {form.password === form.confirm ? "✓ Passwords match" : "✗ Do not match"}

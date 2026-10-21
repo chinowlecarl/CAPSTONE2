@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
+import ConfirmDialog from "../../components/ConfirmDialog";
 
 export default function EventDetails() {
   const { user } = useApp();
@@ -10,6 +11,8 @@ export default function EventDetails() {
   const [search, setSearch]       = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [msg, setMsg]             = useState(null);
+  const [pendingStatus, setPendingStatus] = useState(null);
+  const [statusBusy, setStatusBusy] = useState(false);
 
   const showMsg = (text, type = "success") => {
     setMsg({ text, type });
@@ -23,8 +26,10 @@ export default function EventDetails() {
       .catch(() => setLoading(false));
   }, []);
 
-  const toggleStatus = async (id, currentStatus) => {
-    const newStatus = currentStatus === "active" ? "suspended" : "active";
+  const toggleStatus = async () => {
+    if (!pendingStatus) return;
+    const { id, newStatus } = pendingStatus;
+    setStatusBusy(true);
     try {
       await apiFetch(`/admin/users/${id}/status`, {
         method: "PUT",
@@ -36,6 +41,9 @@ export default function EventDetails() {
       showMsg(`User ${newStatus === "active" ? "activated" : "suspended"}!`);
     } catch (err) {
       showMsg(err.message, "error");
+    } finally {
+      setStatusBusy(false);
+      setPendingStatus(null);
     }
   };
 
@@ -131,7 +139,7 @@ export default function EventDetails() {
                         <span style={{ fontWeight: 700, color: "#1a1a1a" }}>{c.fullname}</span>
                       </div>
                     </td>
-                    <td style={{ padding: "10px 14px", color: "#666" }}>@{c.username}</td>
+                    <td style={{ padding: "10px 14px", color: c.status === "suspended" ? "#dc2626" : "#666", fontWeight: c.status === "suspended" ? 800 : 400 }}>@{c.username}</td>
                     <td style={{ padding: "10px 14px", color: "#666" }}>{c.email}</td>
                     <td style={{ padding: "10px 14px", color: "#888" }}>{c.phone || "—"}</td>
                     <td style={{ padding: "10px 14px" }}>
@@ -149,7 +157,7 @@ export default function EventDetails() {
                     </td>
                     <td style={{ padding: "10px 14px" }}>
                       {c.role !== "admin" && (
-                        <button onClick={() => toggleStatus(c.id, c.status)}
+                        <button onClick={() => setPendingStatus({ id: c.id, username: c.username, newStatus: c.status === "active" ? "suspended" : "active" })}
                           style={{ padding: "5px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", background: c.status === "active" ? "#fff5f5" : "#f0fdf4", color: c.status === "active" ? "#ef4444" : "#22c55e", border: `1px solid ${c.status === "active" ? "#fecaca" : "#bbf7d0"}` }}>
                           {c.status === "active" ? "Suspend" : "Activate"}
                         </button>
@@ -162,6 +170,15 @@ export default function EventDetails() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={!!pendingStatus}
+        title={pendingStatus?.newStatus === "active" ? "Activate this user?" : "Suspend this user?"}
+        message={pendingStatus ? `${pendingStatus.username} will be ${pendingStatus.newStatus === "active" ? "able to access" : "blocked from"} their account.` : ""}
+        confirmLabel={pendingStatus?.newStatus === "active" ? "Activate" : "Suspend"}
+        busy={statusBusy}
+        onCancel={() => setPendingStatus(null)}
+        onConfirm={toggleStatus}
+      />
     </div>
   );
 }
