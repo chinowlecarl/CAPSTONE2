@@ -42,7 +42,7 @@ export default function CheckInDesk() {
   return (
     <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 900, color: "#1a1a1a", margin: "0 0 4px" }}>Customer Check-In Desk</h1>
+        <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 900, color: "#1a1a1a", margin: "0 0 4px" }}>User Transaction Desk</h1>
         <p style={{ color: "#aaa", fontSize: 13 }}>Look up customers and their order history</p>
       </div>
 
