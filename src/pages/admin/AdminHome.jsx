@@ -57,7 +57,7 @@ export default function AdminHome({ setPage }) {
       {/* Tab nav */}
       <div style={{ background: "#fff", borderBottom: "2px solid #fce7f3", padding: "0 24px", display: "flex", gap: 0, overflowX: "auto" }}>
         {TABS.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button key={t.id} className="admin-nav-link" aria-current={tab === t.id ? "page" : undefined} onClick={() => setTab(t.id)}
             style={{ background: "none", border: "none", cursor: "pointer", padding: "14px 18px", fontSize: 12, fontWeight: 700, letterSpacing: 0.8, whiteSpace: "nowrap", color: tab === t.id ? "#be185d" : "#888", borderBottom: tab === t.id ? "3px solid #be185d" : "3px solid transparent", transition: "all .2s" }}>
             {t.label}
           </button>

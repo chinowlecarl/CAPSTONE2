@@ -1,8 +1,10 @@
 import { useState } from "react";
 import "./App.css";
+import "./UIConsistency.css";
  
 import { AppProvider } from "./context/AppContext";
 import { Main } from "./components/Main";
+import { ConfirmHost } from "./components/ConfirmDialog";
  
 import Home from "./pages/Home";
 import Products from "./pages/Products";
@@ -19,17 +21,20 @@ export default function App() {
  
   return (
     <AppProvider>
-      <Main page={page} setPage={setPage}>
-        {page === "home"     && <Home     setPage={setPage} />}
-        {page === "products" && <Products setPage={setPage} />}
-        {page === "cart"     && <Cart     setPage={setPage} />}
-        {page === "about"    && <About    setPage={setPage} />}
-        {page === "login"    && <SignIn   setPage={setPage} />}
-        {page === "signup"   && <Register setPage={setPage} />}
-        {page === "profile"  && <Profile  setPage={setPage} />}
-        {page === "checkout" && <Checkout setPage={setPage} />}
-        {page === "admin"    && <AdminHome setPage={setPage} />}
-      </Main>
+      <>
+        <Main page={page} setPage={setPage}>
+          {page === "home"     && <Home     setPage={setPage} />}
+          {page === "products" && <Products setPage={setPage} />}
+          {page === "cart"     && <Cart     setPage={setPage} />}
+          {page === "about"    && <About    setPage={setPage} />}
+          {page === "login"    && <SignIn   setPage={setPage} />}
+          {page === "signup"   && <Register setPage={setPage} />}
+          {page === "profile"  && <Profile  setPage={setPage} />}
+          {page === "checkout" && <Checkout setPage={setPage} />}
+          {page === "admin"    && <AdminHome setPage={setPage} />}
+        </Main>
+        <ConfirmHost />
+      </>
     </AppProvider>
   );
 }
