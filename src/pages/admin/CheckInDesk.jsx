@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
+import CustomerName from "../../components/CustomerName";
 
 export default function CheckInDesk() {
   const { user } = useApp();
@@ -68,7 +69,9 @@ export default function CheckInDesk() {
                   {c.fullname?.charAt(0).toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, color: "#1a1a1a", fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.fullname}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <CustomerName name={c.fullname} status={c.status} />
+                  </div>
                   <div style={{ color: "#aaa", fontSize: 11 }}>@{c.username}</div>
                 </div>
                 {selected?.id === c.id && <span style={{ color: "#be185d", fontSize: 16 }}>›</span>}
@@ -93,7 +96,9 @@ export default function CheckInDesk() {
                     {selected.fullname?.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 900, color: "#1a1a1a", margin: "0 0 2px" }}>{selected.fullname}</h2>
+                    <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 900, color: "#1a1a1a", margin: "0 0 2px" }}>
+                      <CustomerName name={selected.fullname} status={selected.status} />
+                    </h2>
                     <p style={{ color: "#db2777", fontSize: 12, fontWeight: 600, margin: 0 }}>@{selected.username}</p>
                   </div>
                 </div>

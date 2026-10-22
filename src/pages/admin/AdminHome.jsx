@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useApp } from "../../context/AppContext";
 import ManageProducts from "./ManageProducts";
 import ManageEvents   from "./ManageEvents";
+import PaymentVerification from "./PaymentVerification";
 import CheckInDesk    from "./CheckInDesk";
 import CreateEvent    from "./CreateEvent";
 import EventDetails   from "./EventDetails";
@@ -16,6 +17,7 @@ const TABS = [
   { id: "add",      label: "➕ Add Product",  icon: "➕" },
   { id: "insights", label: "📈 Insights", icon: "📈" }, 
   { id: "behavior", label: "👥 Customer Behavior", icon: "👥" },
+  { id: "payments", label: "💳 Payments",      icon: "💳" },
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
   { id: "activity", label: "🕒 Activity Log",  icon: "🕒" },
@@ -74,6 +76,7 @@ export default function AdminHome({ setPage }) {
         {tab === "checkin"  && <CheckInDesk    setPage={setPage} />}
         {tab === "insights" && <SalesInsights  setPage={setPage} />}
         {tab === "behavior" && <CustomerBehavior />}
+        {tab === "payments" && <PaymentVerification />}
         {tab === "activity" && <ActivityLog />}
       </div>
     </div>
