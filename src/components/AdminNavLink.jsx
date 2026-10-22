@@ -1,6 +1,8 @@
 export function AdminNavLink({ label, active, onClick }) {
   return (
     <button
+      className="admin-nav-link"
+      aria-current={active ? "page" : undefined}
       onClick={onClick}
       style={{
         background: active ? "rgba(190,24,93,0.15)" : "none",

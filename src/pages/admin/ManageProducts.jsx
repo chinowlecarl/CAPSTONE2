@@ -189,18 +189,38 @@ export default function ManageProducts({ setPage }) {
     } catch (err) { showMsg(err.message, "error"); }
   };
 
+  // ✅ UPDATED REMOVE ITEM (archive) HANDLER
   const del = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || deleting) return;
+    const target = pendingDelete;
     setDeleting(true);
-    try {
-      await apiFetch(`/products/${pendingDelete.id}`, { method: "DELETE" });
-      setProducts((ps) => ps.filter((p) => p.id !== pendingDelete.id));
+
+    const removeFromScreen = () => {
+      setProducts((ps) => ps.filter((p) => p.id !== target.id));
+      setStats((s) => ({ ...s, total_products: Math.max(0, (s.total_products || 0) - 1) }));
       showMsg("Product archived. It can be restored for 10 days.");
-      setPendingDelete(null);
+    };
+
+    try {
+      await apiFetch(`/products/${target.id}`, { method: "DELETE" });
+      removeFromScreen();
     } catch (err) {
-      showMsg(err.message, "error");
+      console.error("Remove item failed:", err);
+      // The server may have archived the item but sent a reply apiFetch couldn't parse,
+      // so check the list before showing an error.
+      try {
+        const fresh = await apiFetch("/products");
+        if (Array.isArray(fresh) && !fresh.some((p) => p.id === target.id)) {
+          removeFromScreen();
+        } else {
+          showMsg(err.message || "Could not remove this item.", "error");
+        }
+      } catch {
+        showMsg(err.message || "Could not remove this item.", "error");
+      }
     } finally {
       setDeleting(false);
+      setPendingDelete(null);
     }
   };
 

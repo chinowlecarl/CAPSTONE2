@@ -1,0 +1,89 @@
+/* ============================================================
+   FITCHEQUE: UI consistency layer
+   Imported once from App.jsx (after App.css).
+
+   Most pages style their elements inline, and inline styles always win over a
+   stylesheet. So this file only sets things the inline styles do NOT set:
+   cursor, hover, pressed, keyboard focus, disabled and reduced motion.
+   Colours match the existing pink theme.
+   ============================================================ */
+
+/* 1. Everything clickable shows the pointer hand (18 buttons were showing the plain arrow) */
+button,
+[role="button"],
+a[href],
+summary,
+select,
+label[for],
+input[type="checkbox"],
+input[type="radio"],
+.clickable {
+  cursor: pointer;
+}
+
+/* 2. Disabled things look the same everywhere. !important because some buttons set
+      cursor:pointer inline even while disabled (13 of them did). */
+button:disabled,
+[aria-disabled="true"],
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed !important;
+}
+
+/* 3. Hover and pressed feedback for every button, with one shared speed */
+button {
+  touch-action: manipulation;
+  transition: filter 0.15s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+button:not(:disabled):hover,
+.clickable:hover {
+  filter: brightness(0.96);
+}
+button:not(:disabled):active,
+.clickable:active {
+  filter: brightness(0.91);
+}
+
+/* 4. Navigation links (they had NO hover state at all). The current page keeps its own look. */
+.nav-link:not([aria-current]):hover {
+  color: #be185d !important;
+}
+.admin-nav-link:not([aria-current]):hover {
+  background: rgba(190, 24, 93, 0.12) !important;
+  color: #f9a8d4 !important;
+}
+
+/* 5. Table rows highlight on hover (some tables did this with JavaScript, most did not).
+      Applied to the cells because rows often have their own zebra background set inline. */
+tbody tr:hover > td {
+  background-color: #fff5f7;
+}
+
+/* 6. Keyboard focus is always visible */
+button:focus-visible,
+a[href]:focus-visible,
+summary:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible,
+.clickable:focus-visible {
+  outline: 2px solid #db2777;
+  outline-offset: 2px;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  box-shadow: 0 0 0 3px rgba(219, 39, 119, 0.18);
+}
+
+/* 7. Respect people who ask their device for less motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
