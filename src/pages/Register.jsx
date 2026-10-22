@@ -170,7 +170,7 @@ export default function Register({ setPage }) {
           {loading ? "CREATING ACCOUNT..." : "CREATE ACCOUNT"}
         </button>
 
-        <p style={{ textAlign: "center", color: "#aaa", fontSize: 12, marginTop: 20 }}>
+        <p style={{ textAlign: "center", color: "#aaa", fontSize: 11, marginTop: 20 }}>
           Already have an account?{" "}
           <button onClick={() => setPage("login")} style={{ background: "none", border: "none", color: "#be185d", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Login here</button>
         </p>
