@@ -2,22 +2,34 @@ import { useState, useEffect } from "react";
 import { apiFetch } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
 
-// Returns true if the user is suspended. Checks the common field names,
-// since the file doesn't show which one your backend uses.
-const isSuspended = (u) =>
-  !!(
-    u?.suspended ||
-    u?.is_suspended ||
-    u?.isSuspended ||
-    u?.banned ||
-    u?.is_banned ||
-    u?.status === "suspended" ||
-    u?.account_status === "suspended" ||
-    u?.is_active === false ||
-    u?.active === false
-  );
-
 const RED = "#dc2626";
+
+// Values that mean "off" when a field is a string
+const NO_VALUES = ["", "false", "0", "no", "none", "null", "undefined"];
+const isOn = (v) => {
+  if (typeof v === "string") return !NO_VALUES.includes(v.trim().toLowerCase());
+  return !!v;
+};
+
+// Looks through every field on the user and decides if they are suspended.
+// Works with: suspended, is_suspended, suspended_at, banned, blocked, disabled,
+// status = "suspended", is_active = false, and similar names.
+const isSuspended = (u) => {
+  if (!u) return false;
+  return Object.entries(u).some(([key, val]) => {
+    const k = key.toLowerCase().replace(/[^a-z]/g, "");
+    if (k.includes("suspend") || k.includes("banned") || k.includes("blocked") || k.includes("disabled")) {
+      return isOn(val);
+    }
+    if (k === "status" || k === "state" || k === "accountstatus" || k === "userstatus") {
+      return typeof val === "string" && /suspend|ban|block|disabled/i.test(val);
+    }
+    if (k === "isactive" || k === "active") {
+      return val === false || val === 0 || val === "false" || val === "0";
+    }
+    return false;
+  });
+};
 
 function SuspendedBadge({ size = "small" }) {
   const big = size === "large";
@@ -46,7 +58,11 @@ export default function CheckInDesk() {
   useEffect(() => {
     if (!user || user.role !== "admin") return;
     apiFetch("/admin/users")
-      .then((data) => { setCustomers(data.filter(u => u.role === "customer")); setLoading(false); })
+      .then((data) => {
+        console.log("Check-in users data (you can delete this line later):", data);
+        setCustomers(data.filter(u => u.role === "customer"));
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
