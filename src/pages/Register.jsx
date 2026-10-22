@@ -51,11 +51,11 @@ export default function Register({ setPage }) {
     const errs = [];
     if (!/^[A-Za-z0-9_.]{3,20}$/.test(username)) errs.push("Username must be 3-20 characters: letters, numbers, _ or .");
     if (!form.email.includes("@")) errs.push("Valid email is required");
-    if (!/^[0-9]{10,15}$/.test(form.phone.replace(/\s/g, ""))) errs.push("Valid phone number is required");
+    if (!/^09[0-9]{9}$/.test(form.phone.replace(/[\s-]/g, ""))) errs.push("Phone number must be 11 digits and start with 09 (example: 09171234567)");
     if (!pwReqs.every((r) => r.ok)) errs.push("Password does not meet requirements");
     if (form.password !== form.confirm) errs.push("Passwords do not match");
     setErrors(errs);
-    if (errs.length > 0) return;
+    if (errs.length > 0) return;  w
     setLoading(true);
     try {
       const availability = await apiFetch(`/auth/username-available?username=${encodeURIComponent(username)}`);
