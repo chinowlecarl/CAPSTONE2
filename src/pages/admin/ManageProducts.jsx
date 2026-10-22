@@ -189,7 +189,7 @@ export default function ManageProducts({ setPage }) {
     } catch (err) { showMsg(err.message, "error"); }
   };
 
-  // ✅ UPDATED REMOVE ITEM (archive) HANDLER
+  // Runs when the admin confirms "Delete this item?"
   const del = async () => {
     if (!pendingDelete || deleting) return;
     const target = pendingDelete;
@@ -198,25 +198,25 @@ export default function ManageProducts({ setPage }) {
     const removeFromScreen = () => {
       setProducts((ps) => ps.filter((p) => p.id !== target.id));
       setStats((s) => ({ ...s, total_products: Math.max(0, (s.total_products || 0) - 1) }));
-      showMsg("Product archived. It can be restored for 10 days.");
+      showMsg("Item deleted. It can be restored for 10 days.");
     };
 
     try {
       await apiFetch(`/products/${target.id}`, { method: "DELETE" });
       removeFromScreen();
     } catch (err) {
-      console.error("Remove item failed:", err);
-      // The server may have archived the item but sent a reply apiFetch couldn't parse,
+      console.error("Delete item failed:", err);
+      // The server may have removed the item but sent a reply apiFetch couldn't parse,
       // so check the list before showing an error.
       try {
         const fresh = await apiFetch("/products");
         if (Array.isArray(fresh) && !fresh.some((p) => p.id === target.id)) {
           removeFromScreen();
         } else {
-          showMsg(err.message || "Could not remove this item.", "error");
+          showMsg(err.message || "Could not delete this item.", "error");
         }
       } catch {
-        showMsg(err.message || "Could not remove this item.", "error");
+        showMsg(err.message || "Could not delete this item.", "error");
       }
     } finally {
       setDeleting(false);
@@ -403,11 +403,12 @@ export default function ManageProducts({ setPage }) {
         </div>
       )}
 
+      {/* Delete confirmation popup */}
       <ConfirmDialog
         open={!!pendingDelete}
-        title="Remove item?"
-        message={pendingDelete ? `"${pendingDelete.title}" will be archived and hidden from the store. You can restore it within 10 days.` : ""}
-        confirmLabel="Archive item"
+        title="Delete this item?"
+        message={pendingDelete ? `"${pendingDelete.title}" will be removed from the store. You can restore it within 10 days.` : ""}
+        confirmLabel="Delete"
         destructive
         busy={deleting}
         onCancel={() => setPendingDelete(null)}
