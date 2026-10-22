@@ -11,18 +11,17 @@ const isOn = (v) => {
   return !!v;
 };
 
-// Looks through every field on the user and decides if they are suspended.
-// Works with: suspended, is_suspended, suspended_at, banned, blocked, disabled,
-// status = "suspended", is_active = false, and similar names.
-const isSuspended = (u) => {
-  if (!u) return false;
-  return Object.entries(u).some(([key, val]) => {
+const SUSPEND_KEY = /suspend|banned|blocked|disabled|deactivat/;
+
+// Scans every field (including nested ones) and decides if the user is suspended.
+const isSuspended = (obj, depth = 0) => {
+  if (!obj || typeof obj !== "object" || depth > 3) return false;
+  return Object.entries(obj).some(([key, val]) => {
     const k = key.toLowerCase().replace(/[^a-z]/g, "");
-    if (k.includes("suspend") || k.includes("banned") || k.includes("blocked") || k.includes("disabled")) {
-      return isOn(val);
-    }
-    if (k === "status" || k === "state" || k === "accountstatus" || k === "userstatus") {
-      return typeof val === "string" && /suspend|ban|block|disabled/i.test(val);
+    if (val && typeof val === "object") return isSuspended(val, depth + 1);
+    if (SUSPEND_KEY.test(k)) return isOn(val);
+    if (["status", "state", "accountstatus", "userstatus"].includes(k)) {
+      return typeof val === "string" && /suspend|ban|block|disabled|inactive|deactivat/i.test(val);
     }
     if (k === "isactive" || k === "active") {
       return val === false || val === 0 || val === "false" || val === "0";
@@ -58,11 +57,7 @@ export default function CheckInDesk() {
   useEffect(() => {
     if (!user || user.role !== "admin") return;
     apiFetch("/admin/users")
-      .then((data) => {
-        console.log("Check-in users data (you can delete this line later):", data);
-        setCustomers(data.filter(u => u.role === "customer"));
-        setLoading(false);
-      })
+      .then((data) => { setCustomers(data.filter(u => u.role === "customer")); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
@@ -88,6 +83,7 @@ export default function CheckInDesk() {
   if (!user || user.role !== "admin") return null;
 
   const selectedSuspended = selected ? isSuspended(selected) : false;
+  const noneDetected = !loading && customers.length > 0 && !customers.some((c) => isSuspended(c));
 
   return (
     <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
@@ -95,6 +91,16 @@ export default function CheckInDesk() {
         <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 900, color: "#1a1a1a", margin: "0 0 4px" }}>User Transaction Desk</h1>
         <p style={{ color: "#aaa", fontSize: 13 }}>Look up customers and their order history</p>
       </div>
+
+      {/* TEMPORARY DEBUG BOX: only shows when no suspended customer is detected. Delete this block once red works. */}
+      {noneDetected && (
+        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: 14, marginBottom: 20, fontSize: 12, color: "#92400e" }}>
+          <b>Debug:</b> no suspended customers detected. Raw data for <b>@{customers[0].username}</b>:
+          <pre style={{ margin: "8px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 11, color: "#444" }}>
+            {JSON.stringify(customers[0], null, 2)}
+          </pre>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 20 }}>
         {/* Left: customer list */}
