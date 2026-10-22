@@ -55,7 +55,7 @@ export default function Register({ setPage }) {
     if (!pwReqs.every((r) => r.ok)) errs.push("Password does not meet requirements");
     if (form.password !== form.confirm) errs.push("Passwords do not match");
     setErrors(errs);
-    if (errs.length > 0) return;
+    if (errs.length > 0) return;  w
     setLoading(true);
     try {
       const availability = await apiFetch(`/auth/username-available?username=${encodeURIComponent(username)}`);
@@ -170,7 +170,7 @@ export default function Register({ setPage }) {
           {loading ? "CREATING ACCOUNT..." : "CREATE ACCOUNT"}
         </button>
 
-        <p style={{ textAlign: "center", color: "#aaa", fontSize: 12, marginTop: 20 }}>
+        <p style={{ textAlign: "center", color: "#aaa", fontSize: 11, marginTop: 20 }}>
           Already have an account?{" "}
           <button onClick={() => setPage("login")} style={{ background: "none", border: "none", color: "#be185d", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Login here</button>
         </p>
