@@ -55,7 +55,7 @@ export default function Register({ setPage }) {
     if (!pwReqs.every((r) => r.ok)) errs.push("Password does not meet requirements");
     if (form.password !== form.confirm) errs.push("Passwords do not match");
     setErrors(errs);
-    if (errs.length > 0) return;  w
+    if (errs.length > 0) return;
     setLoading(true);
     try {
       const availability = await apiFetch(`/auth/username-available?username=${encodeURIComponent(username)}`);
