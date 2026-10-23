@@ -16,6 +16,11 @@ export default function ResetPassword({ setPage }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
+  const returnToSignIn = () => {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setPage("login");
+  };
+
   const submit = async (event) => {
     event.preventDefault();
     if (busy) return;
@@ -66,7 +71,7 @@ export default function ResetPassword({ setPage }) {
             <p role="status" style={{ color: "#15803d", fontSize: 13, textAlign: "center", marginBottom: 22 }}>
               Your password has been reset. You can now sign in with your new password.
             </p>
-            <button type="button" onClick={() => setPage("login")} style={{ width: "100%", background: "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, letterSpacing: 1.5, padding: "13px 0", cursor: "pointer" }}>
+            <button type="button" onClick={returnToSignIn} style={{ width: "100%", background: "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, letterSpacing: 1.5, padding: "13px 0", cursor: "pointer" }}>
               GO TO SIGN IN
             </button>
           </>
@@ -77,7 +82,7 @@ export default function ResetPassword({ setPage }) {
             <p role="alert" style={{ background: "#fff5f7", border: "1px solid #fce7f3", borderLeft: "4px solid #be185d", borderRadius: 8, padding: "12px 14px", color: "#be185d", fontSize: 12, fontWeight: 600 }}>
               This reset link is invalid or has expired. Request a new password reset email.
             </p>
-            <button type="button" onClick={() => setPage("login")} style={{ width: "100%", background: "none", border: "none", color: "#be185d", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+            <button type="button" onClick={returnToSignIn} style={{ width: "100%", background: "none", border: "none", color: "#be185d", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
               BACK TO SIGN IN
             </button>
           </>

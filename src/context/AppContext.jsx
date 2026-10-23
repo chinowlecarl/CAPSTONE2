@@ -12,6 +12,9 @@ export function AppProvider({ children }) {
   const [passwordRecoveryReady, setPasswordRecoveryReady] = useState(false);
   const [cart, setCart] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const recoveryCallbackRef = useRef(
+    new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery"
+  );
 
   const toast = (msg, type = "info") => {
     const id = Date.now();
@@ -54,9 +57,11 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      const recoveryLink = new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery";
-      if (recoveryLink && session) {
+      const isResetRoute = new URLSearchParams(window.location.search).get("page") === "reset-password";
+      if (recoveryCallbackRef.current && session) {
         setPasswordRecoveryReady(true);
+      }
+      if (isResetRoute) {
         setUser(null);
         setAuthLoading(false);
         return;
@@ -70,12 +75,15 @@ export function AppProvider({ children }) {
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") {
+        recoveryCallbackRef.current = true;
         setPasswordRecoveryReady(true);
         setUser(null);
         return;
       }
       if (pendingChallengeRef.current) return; // ignore session changes mid-challenge
-      loadProfileForSession(session);
+      const isResetRoute = new URLSearchParams(window.location.search).get("page") === "reset-password";
+      if (isResetRoute) setUser(null);
+      else loadProfileForSession(session);
       if (event === "SIGNED_OUT") {
         setCart([]);
         setPasswordRecoveryReady(false);
