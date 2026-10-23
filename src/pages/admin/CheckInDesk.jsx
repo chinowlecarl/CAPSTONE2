@@ -3,6 +3,49 @@ import { apiFetch } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
 import CustomerName from "../../components/CustomerName";
 
+const RED = "#dc2626";
+
+// Values that mean "off" when a field is a string
+const NO_VALUES = ["", "false", "0", "no", "none", "null", "undefined"];
+const isOn = (v) => {
+  if (typeof v === "string") return !NO_VALUES.includes(v.trim().toLowerCase());
+  return !!v;
+};
+
+const SUSPEND_KEY = /suspend|banned|blocked|disabled|deactivat/;
+
+// Scans every field (including nested ones) and decides if the user is suspended.
+const isSuspended = (obj, depth = 0) => {
+  if (!obj || typeof obj !== "object" || depth > 3) return false;
+  return Object.entries(obj).some(([key, val]) => {
+    const k = key.toLowerCase().replace(/[^a-z]/g, "");
+    if (val && typeof val === "object") return isSuspended(val, depth + 1);
+    if (SUSPEND_KEY.test(k)) return isOn(val);
+    if (["status", "state", "accountstatus", "userstatus"].includes(k)) {
+      return typeof val === "string" && /suspend|ban|block|disabled|inactive|deactivat/i.test(val);
+    }
+    if (k === "isactive" || k === "active") {
+      return val === false || val === 0 || val === "false" || val === "0";
+    }
+    return false;
+  });
+};
+
+function SuspendedBadge({ size = "small" }) {
+  const big = size === "large";
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0,
+      background: "#fef2f2", color: RED, border: "1px solid #fecaca",
+      fontSize: big ? 11 : 9, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase",
+      padding: big ? "3px 10px" : "2px 7px", borderRadius: 20,
+    }}>
+      <span style={{ width: big ? 7 : 6, height: big ? 7 : 6, borderRadius: "50%", background: RED }} />
+      Suspended
+    </span>
+  );
+}
+
 export default function CheckInDesk() {
   const { user } = useApp();
   const [customers, setCustomers] = useState([]);
@@ -40,12 +83,25 @@ export default function CheckInDesk() {
 
   if (!user || user.role !== "admin") return null;
 
+  const selectedSuspended = selected ? isSuspended(selected) : false;
+  const noneDetected = !loading && customers.length > 0 && !customers.some((c) => isSuspended(c));
+
   return (
     <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 900, color: "#1a1a1a", margin: "0 0 4px" }}>User Transaction Desk</h1>
         <p style={{ color: "#aaa", fontSize: 13 }}>Look up customers and their order history</p>
       </div>
+
+      {/* TEMPORARY DEBUG BOX: only shows when no suspended customer is detected. Delete this block once red works. */}
+      {noneDetected && (
+        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: 14, marginBottom: 20, fontSize: 12, color: "#92400e" }}>
+          <b>Debug:</b> no suspended customers detected. Raw data for <b>@{customers[0].username}</b>:
+          <pre style={{ margin: "8px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 11, color: "#444" }}>
+            {JSON.stringify(customers[0], null, 2)}
+          </pre>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 20 }}>
         {/* Left: customer list */}

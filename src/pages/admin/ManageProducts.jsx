@@ -83,16 +83,6 @@ function ImageSlot({ label, value, onChange, inputStyle }) {
               <div style={{ fontSize:11, color:"#aaa" }}>JPG, PNG, WEBP · max 5 MB</div>
             </div>
           )}
-          <ConfirmDialog
-            open={!!pendingDelete}
-            title="Remove item?"
-            message={pendingDelete ? `"${pendingDelete.title}" will be archived and hidden from the store. You can restore it within 10 days.` : ""}
-            confirmLabel="Archive item"
-            destructive
-            busy={deleting}
-            onCancel={() => setPendingDelete(null)}
-            onConfirm={del}
-          />
         </div>
         {value && !uploading && (
           <button
@@ -199,18 +189,38 @@ export default function ManageProducts({ setPage }) {
     } catch (err) { showMsg(err.message, "error"); }
   };
 
+  // Runs when the admin confirms "Delete this item?"
   const del = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || deleting) return;
+    const target = pendingDelete;
     setDeleting(true);
+
+    const removeFromScreen = () => {
+      setProducts((ps) => ps.filter((p) => p.id !== target.id));
+      setStats((s) => ({ ...s, total_products: Math.max(0, (s.total_products || 0) - 1) }));
+      showMsg("Item deleted. It can be restored for 10 days.");
+    };
+
     try {
-      await apiFetch(`/products/${pendingDelete.id}`, { method: "DELETE" });
-      setProducts((ps) => ps.filter((p) => p.id !== pendingDelete.id));
-      showMsg("Product archived. It can be restored for 10 days.");
-      setPendingDelete(null);
+      await apiFetch(`/products/${target.id}`, { method: "DELETE" });
+      removeFromScreen();
     } catch (err) {
-      showMsg(err.message, "error");
+      console.error("Delete item failed:", err);
+      // The server may have removed the item but sent a reply apiFetch couldn't parse,
+      // so check the list before showing an error.
+      try {
+        const fresh = await apiFetch("/products");
+        if (Array.isArray(fresh) && !fresh.some((p) => p.id === target.id)) {
+          removeFromScreen();
+        } else {
+          showMsg(err.message || "Could not delete this item.", "error");
+        }
+      } catch {
+        showMsg(err.message || "Could not delete this item.", "error");
+      }
     } finally {
       setDeleting(false);
+      setPendingDelete(null);
     }
   };
 
@@ -392,6 +402,18 @@ export default function ManageProducts({ setPage }) {
           </div>
         </div>
       )}
+
+      {/* Delete confirmation popup */}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Delete this item?"
+        message={pendingDelete ? `"${pendingDelete.title}" will be removed from the store. You can restore it within 10 days.` : ""}
+        confirmLabel="Delete"
+        destructive
+        busy={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={del}
+      />
     </div>
   );
 }
