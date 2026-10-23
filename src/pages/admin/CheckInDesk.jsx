@@ -3,6 +3,49 @@ import { apiFetch } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
 import CustomerName from "../../components/CustomerName";
 
+const RED = "#dc2626";
+
+// Values that mean "off" when a field is a string
+const NO_VALUES = ["", "false", "0", "no", "none", "null", "undefined"];
+const isOn = (v) => {
+  if (typeof v === "string") return !NO_VALUES.includes(v.trim().toLowerCase());
+  return !!v;
+};
+
+const SUSPEND_KEY = /suspend|banned|blocked|disabled|deactivat/;
+
+// Scans every field (including nested ones) and decides if the user is suspended.
+const isSuspended = (obj, depth = 0) => {
+  if (!obj || typeof obj !== "object" || depth > 3) return false;
+  return Object.entries(obj).some(([key, val]) => {
+    const k = key.toLowerCase().replace(/[^a-z]/g, "");
+    if (val && typeof val === "object") return isSuspended(val, depth + 1);
+    if (SUSPEND_KEY.test(k)) return isOn(val);
+    if (["status", "state", "accountstatus", "userstatus"].includes(k)) {
+      return typeof val === "string" && /suspend|ban|block|disabled|inactive|deactivat/i.test(val);
+    }
+    if (k === "isactive" || k === "active") {
+      return val === false || val === 0 || val === "false" || val === "0";
+    }
+    return false;
+  });
+};
+
+function SuspendedBadge({ size = "small" }) {
+  const big = size === "large";
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0,
+      background: "#fef2f2", color: RED, border: "1px solid #fecaca",
+      fontSize: big ? 11 : 9, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase",
+      padding: big ? "3px 10px" : "2px 7px", borderRadius: 20,
+    }}>
+      <span style={{ width: big ? 7 : 6, height: big ? 7 : 6, borderRadius: "50%", background: RED }} />
+      Suspended
+    </span>
+  );
+}
+
 export default function CheckInDesk() {
   const { user } = useApp();
   const [customers, setCustomers] = useState([]);
@@ -40,12 +83,25 @@ export default function CheckInDesk() {
 
   if (!user || user.role !== "admin") return null;
 
+  const selectedSuspended = selected ? isSuspended(selected) : false;
+  const noneDetected = !loading && customers.length > 0 && !customers.some((c) => isSuspended(c));
+
   return (
     <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 900, color: "#1a1a1a", margin: "0 0 4px" }}>User Transaction Desk</h1>
         <p style={{ color: "#aaa", fontSize: 13 }}>Look up customers and their order history</p>
       </div>
+
+      {/* TEMPORARY DEBUG BOX: only shows when no suspended customer is detected. Delete this block once red works. */}
+      {noneDetected && (
+        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: 14, marginBottom: 20, fontSize: 12, color: "#92400e" }}>
+          <b>Debug:</b> no suspended customers detected. Raw data for <b>@{customers[0].username}</b>:
+          <pre style={{ margin: "8px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 11, color: "#444" }}>
+            {JSON.stringify(customers[0], null, 2)}
+          </pre>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 20 }}>
         {/* Left: customer list */}
@@ -62,21 +118,25 @@ export default function CheckInDesk() {
               </div>
             ) : filtered.length === 0 ? (
               <p style={{ color: "#ccc", textAlign: "center", padding: "30px 16px", fontSize: 13 }}>No customers found</p>
-            ) : filtered.map((c) => (
-              <button key={c.id} onClick={() => selectCustomer(c)}
-                style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: selected?.id === c.id ? "#fff5f7" : "none", border: "none", borderBottom: "1px solid #fce7f3", cursor: "pointer", textAlign: "left" }}>
-                <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#f9a8d4,#be185d)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
-                  {c.fullname?.charAt(0).toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    <CustomerName name={c.fullname} status={c.status} />
+            ) : filtered.map((c) => {
+              const sus = isSuspended(c);
+              return (
+                <button key={c.id} onClick={() => selectCustomer(c)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: selected?.id === c.id ? "#fff5f7" : "none", border: "none", borderBottom: "1px solid #fce7f3", cursor: "pointer", textAlign: "left" }}>
+                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#f9a8d4,#be185d)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
+                    {c.fullname?.charAt(0).toUpperCase()}
                   </div>
-                  <div style={{ color: "#aaa", fontSize: 11 }}>@{c.username}</div>
-                </div>
-                {selected?.id === c.id && <span style={{ color: "#be185d", fontSize: 16 }}>›</span>}
-              </button>
-            ))}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      <span style={{ fontWeight: 700, color: "#1a1a1a", fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.fullname}</span>
+                      {sus && <SuspendedBadge />}
+                    </div>
+                    <div style={{ color: sus ? RED : "#aaa", fontSize: 11, fontWeight: sus ? 700 : 400 }}>@{c.username}</div>
+                  </div>
+                  {selected?.id === c.id && <span style={{ color: "#be185d", fontSize: 16 }}>›</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -96,10 +156,11 @@ export default function CheckInDesk() {
                     {selected.fullname?.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 900, color: "#1a1a1a", margin: "0 0 2px" }}>
-                      <CustomerName name={selected.fullname} status={selected.status} />
-                    </h2>
-                    <p style={{ color: "#db2777", fontSize: 12, fontWeight: 600, margin: 0 }}>@{selected.username}</p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 2 }}>
+                      <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 900, color: "#1a1a1a", margin: 0 }}>{selected.fullname}</h2>
+                      {selectedSuspended && <SuspendedBadge size="large" />}
+                    </div>
+                    <p style={{ color: selectedSuspended ? RED : "#db2777", fontSize: 12, fontWeight: 600, margin: 0 }}>@{selected.username}</p>
                   </div>
                 </div>
                 <div style={{ padding: "16px 20px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
