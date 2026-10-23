@@ -18,11 +18,16 @@ import AdminHome from "./pages/admin/AdminHome";
 import ResetPassword from "./pages/ResetPassword";
  
 export default function App() {
-  const [page, setPage] = useState(() =>
-    new URLSearchParams(window.location.search).get("page") === "reset-password"
+  const [page, setPage] = useState(() => {
+    const query = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const recoveryCallback = hash.get("type") === "recovery" ||
+      hash.get("error_code") === "otp_expired" ||
+      query.get("error_code") === "otp_expired";
+    return query.get("page") === "reset-password" || recoveryCallback
       ? "reset-password"
-      : "home"
-  );
+      : "home";
+  });
  
   return (
     <AppProvider>
