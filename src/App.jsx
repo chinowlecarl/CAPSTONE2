@@ -15,9 +15,14 @@ import Register from "./pages/Register";
 import Profile from "./pages/Profile";
 import Checkout from "./pages/Checkout";
 import AdminHome from "./pages/admin/AdminHome";
+import ResetPassword from "./pages/ResetPassword";
  
 export default function App() {
-  const [page, setPage] = useState("home");
+  const [page, setPage] = useState(() =>
+    new URLSearchParams(window.location.search).get("page") === "reset-password"
+      ? "reset-password"
+      : "home"
+  );
  
   return (
     <AppProvider>
@@ -28,6 +33,7 @@ export default function App() {
           {page === "cart"     && <Cart     setPage={setPage} />}
           {page === "about"    && <About    setPage={setPage} />}
           {page === "login"    && <SignIn   setPage={setPage} />}
+          {page === "reset-password" && <ResetPassword setPage={setPage} />}
           {page === "signup"   && <Register setPage={setPage} />}
           {page === "profile"  && <Profile  setPage={setPage} />}
           {page === "checkout" && <Checkout setPage={setPage} />}

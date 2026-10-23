@@ -84,6 +84,44 @@ Common status values used by the app:
 The deployed schema must match the SQL migrations and setup files applied to the
 Supabase project.
 
+### Direct database access and login protection
+
+Apply `supabase/migrations/20261023000000_restrict_direct_data_access.sql` to
+the Supabase project. The app's backend uses the service-role key; the browser
+should use only the anon/publishable key. This migration restricts direct
+Data API access to business tables, allows authenticated users to read only
+their own profile, limits browser profile updates to name/phone/address, and
+blocks direct access to the private `payment-proofs` bucket. It is designed to
+constrain older permissive RLS policies too. Test it in staging before
+production; direct client access to products, carts, orders, and categories is
+intentionally denied because the app accesses them through the backend API.
+With the Supabase CLI linked to the intended project, review migration history
+using `supabase migration list`, then apply pending migrations using
+`supabase db push`.
+
+Login is performed directly against Supabase Auth by the browser, so the
+Express API rate limiter does not protect password attempts. In the Supabase
+Dashboard, configure Authentication's rate limits and enable CAPTCHA/bot
+protection for sign-in and sign-up. Test with a staging account and verify
+repeated invalid attempts are throttled or challenged; do not perform
+high-volume tests against production.
+
+Password recovery is handled by the frontend at `/?page=reset-password`.
+Set the Supabase Auth Site URL to the production frontend origin and add the
+exact recovery redirect URL to Authentication > URL Configuration > Redirect
+URLs (for example, `https://your-domain.com/?page=reset-password`). Add the
+local frontend URL when testing locally. The sign-in screen requests the
+recovery email; the reset page accepts the recovery session and updates the
+password. Keep the email template link pointed at `{{ .ConfirmationURL }}`.
+
+After deploying the migration, test using anon and customer access tokens:
+
+- Anonymous requests cannot read profiles or payment proofs.
+- A customer can read and update their own profile's `fullname`, `phone`, and
+  `address`, but cannot change `role`/`status`, read another profile, or access
+  business tables directly.
+- Payment-proof upload and signed-link flows still work through the backend.
+
 ## 4. Features
 
 ### Customer
