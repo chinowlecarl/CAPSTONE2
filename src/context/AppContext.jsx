@@ -6,15 +6,22 @@ import { createContext, useContext, useState, useEffect, useRef } from "react";
 export const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
 
+const isPasswordResetLocation = () => {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  return query.get("page") === "reset-password" ||
+    hash.get("type") === "recovery" ||
+    hash.has("error_code");
+};
+
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [passwordRecoveryReady, setPasswordRecoveryReady] = useState(false);
   const [cart, setCart] = useState([]);
   const [toasts, setToasts] = useState([]);
-  const recoveryCallbackRef = useRef(
-    new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery"
-  );
+  const initialHashParams = new URLSearchParams(window.location.hash.slice(1));
+  const recoveryCallbackRef = useRef(initialHashParams.get("type") === "recovery");
 
   const toast = (msg, type = "info") => {
     const id = Date.now();
@@ -57,7 +64,7 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      const isResetRoute = new URLSearchParams(window.location.search).get("page") === "reset-password";
+      const isResetRoute = isPasswordResetLocation();
       if (recoveryCallbackRef.current && session) {
         setPasswordRecoveryReady(true);
       }
@@ -81,7 +88,7 @@ export function AppProvider({ children }) {
         return;
       }
       if (pendingChallengeRef.current) return; // ignore session changes mid-challenge
-      const isResetRoute = new URLSearchParams(window.location.search).get("page") === "reset-password";
+      const isResetRoute = isPasswordResetLocation();
       if (isResetRoute) setUser(null);
       else loadProfileForSession(session);
       if (event === "SIGNED_OUT") {

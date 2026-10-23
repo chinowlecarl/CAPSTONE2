@@ -17,7 +17,7 @@ export default function ResetPassword({ setPage }) {
   const [success, setSuccess] = useState(false);
 
   const returnToSignIn = () => {
-    window.history.replaceState({}, document.title, window.location.pathname);
+    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
     setPage("login");
   };
 
@@ -41,7 +41,7 @@ export default function ResetPassword({ setPage }) {
     setBusy(true);
     try {
       await completePasswordReset(password);
-      window.history.replaceState({}, document.title, window.location.pathname);
+      window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
       setSuccess(true);
     } catch (err) {
       setError(err.message || "Could not reset your password.");
