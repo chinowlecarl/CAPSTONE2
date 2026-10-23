@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
+import CustomerName from "../../components/CustomerName";
 
 const STATUS_COLORS = {
   pending:   { bg: "#fffbeb", color: "#f59e0b", border: "#fde68a" },
@@ -122,9 +123,10 @@ export default function ManageEvents({ setPage }) {
                       onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#fff8fb")}>
                       <td style={{ padding: "12px 14px", fontFamily: "monospace", fontSize: 11, color: "#666" }}>#{order.id.slice(0,8).toUpperCase()}</td>
                       <td style={{ padding: "12px 14px" }}>
-                        <div style={{ fontWeight: 700, color: "#1a1a1a" }}>{order.users?.fullname || "Guest"}</div>
+                        <div style={{ fontWeight: 700 }}>
+                          <CustomerName name={order.users?.fullname || "Guest"} status={order.users?.status} />
+                        </div>
                         {order.users?.username && <div style={{ fontSize: 11, color: order.users.status === "suspended" ? "#dc2626" : "#666", fontWeight: order.users.status === "suspended" ? 800 : 500 }}>@{order.users.username}</div>}
-                        {order.users?.status && <span style={{ display: "inline-block", marginTop: 3, padding: "2px 7px", borderRadius: 10, fontSize: 9, fontWeight: 800, textTransform: "uppercase", background: order.users.status === "suspended" ? "#fee2e2" : "#dcfce7", color: order.users.status === "suspended" ? "#b91c1c" : "#166534" }}>{order.users.status}</span>}
                         <div style={{ fontSize: 11, color: "#bbb" }}>{order.users?.email || ""}</div>
                       </td>
                       <td style={{ padding: "12px 14px", color: "#555" }}>{order.order_items?.length || 0} item{order.order_items?.length !== 1 ? "s" : ""}</td>

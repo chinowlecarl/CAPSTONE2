@@ -3,6 +3,7 @@ import { apiFetch, fmt } from "../../utils/api";
 import { supabase } from "../../utils/supabase";
 import { useApp } from "../../context/AppContext";
 import ConfirmDialog from "../../components/ConfirmDialog";
+import CustomerName from "../../components/CustomerName";
 
 const FILTERS = [
   { id: "verify",   label: "To verify",     test: (o) => o.payment_status === "PENDING_VERIFICATION" },
@@ -192,7 +193,9 @@ export default function PaymentVerification() {
                       {badge(pay, pay.label)}
                       {o.payment_status === "PAID" && badge(del, o.delivery_status.replace("_", " "))}
                     </div>
-                    <div style={{ fontWeight: 700, color: "#1a1a1a", fontSize: 14 }}>{o.users?.fullname || "Customer"}</div>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>
+                      <CustomerName name={o.users?.fullname || "Customer"} status={o.users?.status} />
+                    </div>
                     <div style={{ fontSize: 12, color: "#999", marginBottom: 6 }}>{o.users?.email || ""}</div>
                     <div style={{ fontSize: 12, color: "#666" }}>📍 {o.shipping_address || "No address"}</div>
                   </div>

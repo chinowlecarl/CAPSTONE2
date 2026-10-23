@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
+import CustomerName from "../../components/CustomerName";
 
 const RED = "#dc2626";
 

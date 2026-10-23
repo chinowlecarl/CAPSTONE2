@@ -9,6 +9,7 @@ export const useApp = () => useContext(AppContext);
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [passwordRecoveryReady, setPasswordRecoveryReady] = useState(false);
   const [cart, setCart] = useState([]);
   const [toasts, setToasts] = useState([]);
 
@@ -53,6 +54,13 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
+      const recoveryLink = new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery";
+      if (recoveryLink && session) {
+        setPasswordRecoveryReady(true);
+        setUser(null);
+        setAuthLoading(false);
+        return;
+      }
       if (!pendingChallengeRef.current) {
         loadProfileForSession(session).finally(() => setAuthLoading(false));
       } else {
@@ -61,9 +69,17 @@ export function AppProvider({ children }) {
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setPasswordRecoveryReady(true);
+        setUser(null);
+        return;
+      }
       if (pendingChallengeRef.current) return; // ignore session changes mid-challenge
       loadProfileForSession(session);
-      if (event === "SIGNED_OUT") setCart([]);
+      if (event === "SIGNED_OUT") {
+        setCart([]);
+        setPasswordRecoveryReady(false);
+      }
     });
 
     return () => listener.subscription.unsubscribe();
@@ -87,6 +103,27 @@ export function AppProvider({ children }) {
     } catch (err) {
       console.warn(`Could not record ${action.toLowerCase()} activity: ${err.message}`);
     }
+  };
+
+  const requestPasswordReset = async (email) => {
+    const redirectTo = `${window.location.origin}/?page=reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) throw new Error(error.message);
+  };
+
+  const completePasswordReset = async (newPassword) => {
+    if (!passwordRecoveryReady) {
+      throw new Error("Open the password reset link from your email before setting a new password.");
+    }
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw new Error(sessionError.message);
+    if (!session) throw new Error("Your reset link is invalid or has expired. Request a new one.");
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw new Error(error.message);
+    await supabase.auth.signOut();
+    setUser(null);
+    setPasswordRecoveryReady(false);
   };
 
   // Step 1: password check + branch to the right second factor.
@@ -305,8 +342,9 @@ export function AppProvider({ children }) {
   
 
     const ctx = {
-    user, authLoading, cart, toasts,
+    user, authLoading, cart, toasts, passwordRecoveryReady,
     login, logout, registerUser, completeLogin, completeRegister, updateProfile,
+    requestPasswordReset, completePasswordReset,
     verifyTotpChallenge, verifyEmailOtpChallenge, cancelChallenge,
     addToCart, removeFromCart, updateQty, clearCart,
     toast,

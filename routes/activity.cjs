@@ -231,7 +231,27 @@ module.exports = function registerActivity(app, { supabase, auth, adminOnly }) {
         .range(start, start + pageSize - 1);
       if (error) throw error;
 
-      res.json({ rows: data, total: count ?? 0, page, pageSize, actions: ACTIONS });
+      const actorIds = [...new Set(data.map((row) => row.actor_id).filter(Boolean))];
+      let statusByActor = new Map();
+      if (actorIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id,status")
+          .in("id", actorIds);
+        if (profilesError) throw profilesError;
+        statusByActor = new Map(profiles.map((profile) => [profile.id, profile.status]));
+      }
+
+      res.json({
+        rows: data.map((row) => ({
+          ...row,
+          actor_status: statusByActor.get(row.actor_id) || null,
+        })),
+        total: count ?? 0,
+        page,
+        pageSize,
+        actions: ACTIONS,
+      });
     } catch (err) {
       console.error(`[ACTIVITY READ ERROR] ${err.message}`);
       res.status(500).json({ error: "Failed to load the activity log" });

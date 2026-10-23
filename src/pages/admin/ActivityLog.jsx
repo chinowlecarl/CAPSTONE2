@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { apiFetch } from "../../utils/api";
+import CustomerName from "../../components/CustomerName";
 
 const PINK = "#be185d";
 const LINE = "#fce7f3";
@@ -175,7 +176,12 @@ export default function ActivityLog() {
                           </time>
                         </td>
                         <td style={td}>
-                          <div style={{ fontWeight: 700, color: "#1a1a1a" }}>{r.actor_name}</div>
+                          <div style={{ fontWeight: 700 }}>
+                            <CustomerName
+                              name={r.actor_name}
+                              status={r.actor_role === "customer" ? r.actor_status : undefined}
+                            />
+                          </div>
                           <span style={{ display: "inline-block", marginTop: 3, padding: "2px 9px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: rs.bg, color: rs.fg, border: `1px solid ${rs.bd}` }}>{rs.label}</span>
                         </td>
                         <td style={td}>
