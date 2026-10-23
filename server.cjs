@@ -127,7 +127,20 @@ function adminOnly(req, res, next) {
     console.warn(`[ACCESS DENIED] ${new Date().toISOString()} - User ${req.user?.id} attempted admin access`);
     return res.status(403).json({ error: "Admin access required" });
   }
-  next();
+
+  try {
+    const token = (req.headers.authorization || "").split(" ")[1] || "";
+    const part = token.split(".")[1] || "";
+    const claims = JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
+    if (claims.aal === "aal2") return next();
+  } catch (_) {
+    // The authenticated token is malformed or does not contain readable claims.
+  }
+
+  console.warn(`[MFA REQUIRED] ${new Date().toISOString()} - Admin ${req.user.id} attempted admin access without aal2`);
+  return res.status(403).json({
+    error: "Two-factor authentication required. Log in again and enter your authenticator code.",
+  });
 }
 
 const activityLog = require("./routes/activity.cjs")(app, { supabase, auth, adminOnly });

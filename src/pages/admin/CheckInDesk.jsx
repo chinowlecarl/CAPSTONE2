@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
+import CustomerName from "../../components/CustomerName";
 
 const RED = "#dc2626";
 
@@ -117,25 +118,21 @@ export default function CheckInDesk() {
               </div>
             ) : filtered.length === 0 ? (
               <p style={{ color: "#ccc", textAlign: "center", padding: "30px 16px", fontSize: 13 }}>No customers found</p>
-            ) : filtered.map((c) => {
-              const sus = isSuspended(c);
-              return (
-                <button key={c.id} onClick={() => selectCustomer(c)}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: selected?.id === c.id ? "#fff5f7" : "none", border: "none", borderBottom: "1px solid #fce7f3", cursor: "pointer", textAlign: "left" }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#f9a8d4,#be185d)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
-                    {c.fullname?.charAt(0).toUpperCase()}
+            ) : filtered.map((c) => (
+              <button key={c.id} onClick={() => selectCustomer(c)}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: selected?.id === c.id ? "#fff5f7" : "none", border: "none", borderBottom: "1px solid #fce7f3", cursor: "pointer", textAlign: "left" }}>
+                <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#f9a8d4,#be185d)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
+                  {c.fullname?.charAt(0).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <CustomerName name={c.fullname} status={c.status} />
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                      <span style={{ fontWeight: 700, color: "#1a1a1a", fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.fullname}</span>
-                      {sus && <SuspendedBadge />}
-                    </div>
-                    <div style={{ color: sus ? RED : "#aaa", fontSize: 11, fontWeight: sus ? 700 : 400 }}>@{c.username}</div>
-                  </div>
-                  {selected?.id === c.id && <span style={{ color: "#be185d", fontSize: 16 }}>›</span>}
-                </button>
-              );
-            })}
+                  <div style={{ color: "#aaa", fontSize: 11 }}>@{c.username}</div>
+                </div>
+                {selected?.id === c.id && <span style={{ color: "#be185d", fontSize: 16 }}>›</span>}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -155,11 +152,10 @@ export default function CheckInDesk() {
                     {selected.fullname?.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 2 }}>
-                      <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 900, color: "#1a1a1a", margin: 0 }}>{selected.fullname}</h2>
-                      {selectedSuspended && <SuspendedBadge size="large" />}
-                    </div>
-                    <p style={{ color: selectedSuspended ? RED : "#db2777", fontSize: 12, fontWeight: 600, margin: 0 }}>@{selected.username}</p>
+                    <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 900, color: "#1a1a1a", margin: "0 0 2px" }}>
+                      <CustomerName name={selected.fullname} status={selected.status} />
+                    </h2>
+                    <p style={{ color: "#db2777", fontSize: 12, fontWeight: 600, margin: 0 }}>@{selected.username}</p>
                   </div>
                 </div>
                 <div style={{ padding: "16px 20px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>

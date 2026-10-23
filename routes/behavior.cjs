@@ -96,7 +96,7 @@ module.exports = function registerBehavior(app, { supabase, auth, adminOnly }) {
           .order("created_at", { ascending: true })
           .order("id", { ascending: true }),
       ),
-      fetchPaged(() => supabase.from("profiles").select("id,fullname,username,role,created_at").order("id", { ascending: true })),
+      fetchPaged(() => supabase.from("profiles").select("id,fullname,username,role,status,created_at").order("id", { ascending: true })),
     ]);
 
     // Carts are optional: if the table has no created_at column this part is simply skipped.
@@ -109,14 +109,24 @@ module.exports = function registerBehavior(app, { supabase, auth, adminOnly }) {
       carts = null;
     }
 
-    const names = new Map(profiles.map((p) => [p.id, (p.fullname || p.username || "Customer").trim()]));
+    const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
 
     // ── per-customer history ───────────────────────────────
     const byUser = new Map();
     const user = (id) => {
       let c = byUser.get(id);
       if (!c) {
-        c = { id, name: names.get(id) || "Customer", orders: 0, spent: 0, days: [], cancelled: 0, lastAnyAt: 0 };
+        const profile = profileById.get(id);
+        c = {
+          id,
+          name: (profile?.fullname || profile?.username || "Customer").trim(),
+          status: profile?.status,
+          orders: 0,
+          spent: 0,
+          days: [],
+          cancelled: 0,
+          lastAnyAt: 0,
+        };
         byUser.set(id, c);
       }
       return c;
@@ -207,6 +217,7 @@ module.exports = function registerBehavior(app, { supabase, auth, adminOnly }) {
       .sort((x, y) => y.b.spent - x.b.spent)
       .map(({ b, usual }) => ({
         name: b.name,
+        status: b.status,
         orders: b.orders,
         spent: round2(b.spent),
         daysSince: b.recency,
@@ -411,8 +422,7 @@ module.exports = function registerBehavior(app, { supabase, auth, adminOnly }) {
 
     // win-back
     if (winBack.length > 0) {
-      const top = winBack.slice(0, 3).map((w) => `${w.name} (usually every ~${w.usualGapDays} days, now ${w.daysSince})`);
-      add("warning", `${plural(winBack.length, "customer")} ${winBack.length === 1 ? "is" : "are"} overdue for a reorder`, `Compared with their own buying rhythm: ${listNames(top)}. Together they have spent ${peso(sum(winBack.map((w) => w.spent)))}.`);
+      add("warning", `${plural(winBack.length, "customer")} ${winBack.length === 1 ? "is" : "are"} overdue for a reorder`, `Compared with their own buying rhythms, these customers have spent ${peso(sum(winBack.map((w) => w.spent)))} combined. Consider a targeted follow-up while they are still within their typical buying cycle.`);
     }
 
     // concentration
