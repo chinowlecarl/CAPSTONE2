@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { apiFetch } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
 
-export default function CheckInDesk() {
+export default function UserTransactionDesk() {
   const { user } = useApp();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading]     = useState(true);

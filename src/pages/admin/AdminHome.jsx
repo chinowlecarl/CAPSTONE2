@@ -11,11 +11,11 @@ import CustomerBehavior from "./CustomerBehavior";
 const TABS = [
   { id: "products", label: "📦 Products",     icon: "📦" },
   { id: "add",      label: "➕ Add Product",  icon: "➕" },
-  { id: "insights", label: "📈 Insights", icon: "📈" }, 
+  { id: "insights", label: "📈 Insights", icon: "📈" },
   { id: "behavior", label: "👥 Customer Behavior", icon: "👥" },
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
-  { id: "checkin",  label: "🔍 User Transaction",     icon: "🔍" },
+  { id: "checkin",  label: "🔍 User Transaction", icon: "🔍" },
 ];
 
 export default function AdminHome({ setPage }) {
