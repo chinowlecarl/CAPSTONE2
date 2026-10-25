@@ -15,15 +15,14 @@ const TABS = [
   { id: "products", label: "📦 Products",     icon: "📦" },
   { id: "archive",  label: "🗃 Archived",      icon: "🗃" },
   { id: "add",      label: "➕ Add Product",  icon: "➕" },
-  { id: "insights", label: "📈 Insights", icon: "📈" }, 
+  { id: "insights", label: "📈 Insights", icon: "📈" },
   { id: "behavior", label: "👥 Customer Behavior", icon: "👥" },
   { id: "payments", label: "💳 Payments",      icon: "💳" },
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
-  { id: "activity", label: "🕒 Activity Log",  icon: "🕒" },
-  { id: "checkin",  label: "🔍 Check-In",     icon: "🔍" },
+  { id: "activity", label: "🕐 Activity Log",  icon: "🕐" },
+  { id: "checkin",  label: "🔍 User Transaction", icon: "🔍" },
 ];
-
 export default function AdminHome({ setPage }) {
   const { user, logout } = useApp();
   const [tab, setTab] = useState("products");

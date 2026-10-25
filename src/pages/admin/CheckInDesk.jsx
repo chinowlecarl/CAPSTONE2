@@ -46,7 +46,7 @@ function SuspendedBadge({ size = "small" }) {
   );
 }
 
-export default function CheckInDesk() {
+export default function UserTransactionDesk() {
   const { user } = useApp();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading]     = useState(true);
