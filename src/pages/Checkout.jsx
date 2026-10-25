@@ -34,6 +34,7 @@ export default function Checkout({ setPage }) {
   const [payment, setPayment] = useState("cod");
   const [loading, setLoading] = useState(false);
   const [orderId, setOrderId] = useState(null);
+  const [orderTotal, setOrderTotal] = useState(null); // FIX: saved total, because cart is cleared after placing order
   const [paymentSubmitted, setPaymentSubmitted] = useState(false);
   const [form, setForm]       = useState({
     username: user?.username || "",
@@ -68,7 +69,7 @@ export default function Checkout({ setPage }) {
     textTransform: "uppercase",
   };
 
-    const validateStep1 = () => {
+  const validateStep1 = () => {
     if (!form.fullname || !form.email || !form.phone || !form.city) return false;
     return /^(09|\+639|639)\d{9}$/.test(form.phone.replace(/[\s-]/g, ""));
   };
@@ -83,6 +84,7 @@ export default function Checkout({ setPage }) {
         body: JSON.stringify({ shipping_address }),
       });
       setOrderId(data.order?.id);
+      setOrderTotal(total); // FIX: save the total BEFORE the cart is cleared
       await clearCart();
 
       if (payment === "gcash" || payment === "maya") {
@@ -181,7 +183,8 @@ export default function Checkout({ setPage }) {
 
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <p style={{ fontSize: 12, color: "#888", margin: "0 0 4px" }}>Amount to pay</p>
-          <p style={{ fontSize: 26, fontWeight: 900, color: "#be185d", margin: 0 }}>{fmt(total)}</p>
+          {/* FIX: use saved orderTotal instead of live total */}
+          <p style={{ fontSize: 26, fontWeight: 900, color: "#be185d", margin: 0 }}>{fmt(orderTotal ?? total)}</p>
         </div>
 
         <div style={{ marginBottom: 16 }}>
@@ -242,7 +245,7 @@ export default function Checkout({ setPage }) {
             ["Payment", PAYMENT_METHODS.find(p => p.id === payment)?.label],
             ["Deliver to", `${form.address}, ${form.city}`],
             ["Contact", form.phone],
-            ["Total", fmt(total)],
+            ["Total", fmt(orderTotal ?? total)], // FIX: use saved orderTotal
           ].map(([label, val]) => (
             <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
               <span style={{ color: "#888" }}>{label}</span>
