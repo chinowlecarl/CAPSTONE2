@@ -40,7 +40,9 @@ export default function EventDetails() {
   };
 
   const filtered = customers.filter((c) => {
-    const matchStatus = statusFilter === "all" || c.status === statusFilter;
+    const matchStatus =
+      statusFilter === "all" ||
+      (statusFilter === "admin" ? c.role === "admin" : c.status === statusFilter);
     const matchSearch =
       !search ||
       c.fullname.toLowerCase().includes(search.toLowerCase()) ||
@@ -62,20 +64,48 @@ export default function EventDetails() {
         <p style={{ color: "#aaa", fontSize: 13 }}>View and manage all registered users</p>
       </div>
 
-      {/* Summary cards */}
+      {/* Summary cards (clickable filters) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 24 }}>
         {[
-          ["👥", customers.length, "Total Users",  "#be185d"],
-          ["✅", active,           "Active",        "#22c55e"],
-          ["🚫", suspended,        "Suspended",     "#ef4444"],
-          ["🛡",  admins,           "Admins",        "#8b5cf6"],
-        ].map(([icon, val, label, color]) => (
-          <div key={label} style={{ background: "#fff", borderRadius: 14, padding: "18px 16px", border: "1px solid #fce7f3", boxShadow: "0 2px 12px rgba(190,24,93,0.06)", textAlign: "center" }}>
-            <div style={{ fontSize: 22, marginBottom: 6 }}>{icon}</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color, marginBottom: 2 }}>{val}</div>
-            <div style={{ color: "#888", fontSize: 11, fontWeight: 600 }}>{label}</div>
-          </div>
-        ))}
+          ["👥", customers.length, "Total Users", "#be185d", "all"],
+          ["✅", active,           "Active",      "#22c55e", "active"],
+          ["🚫", suspended,        "Suspended",   "#ef4444", "suspended"],
+          ["🛡",  admins,           "Admins",      "#8b5cf6", "admin"],
+        ].map(([icon, val, label, color, filterKey]) => {
+          const selected = statusFilter === filterKey;
+          return (
+            <div
+              key={label}
+              role="button"
+              tabIndex={0}
+              onClick={() => setStatusFilter(selected ? "all" : filterKey)}
+              onKeyDown={(e) => e.key === "Enter" && setStatusFilter(selected ? "all" : filterKey)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-2px)";
+                e.currentTarget.style.boxShadow = "0 8px 20px rgba(190,24,93,0.15)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "none";
+                e.currentTarget.style.boxShadow = "0 2px 12px rgba(190,24,93,0.06)";
+              }}
+              style={{
+                background: "#fff",
+                borderRadius: 14,
+                padding: "18px 16px",
+                border: `2px solid ${selected ? color : "#fce7f3"}`,
+                boxShadow: "0 2px 12px rgba(190,24,93,0.06)",
+                textAlign: "center",
+                cursor: "pointer",
+                transition: "transform .15s, box-shadow .15s, border-color .15s",
+                userSelect: "none",
+              }}
+            >
+              <div style={{ fontSize: 22, marginBottom: 6 }}>{icon}</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color, marginBottom: 2 }}>{val}</div>
+              <div style={{ color: "#888", fontSize: 11, fontWeight: 600 }}>{label}</div>
+            </div>
+          );
+        })}
       </div>
 
       {msg && (
@@ -92,7 +122,7 @@ export default function EventDetails() {
             style={{ width: "100%", paddingLeft: 36, paddingRight: 16, paddingTop: 10, paddingBottom: 10, border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 13, outline: "none", background: "#fff5f7", boxSizing: "border-box" }} />
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          {["all","active","suspended"].map((s) => (
+          {["all", "active", "suspended", "admin"].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               style={{ padding: "8px 16px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", background: statusFilter === s ? "linear-gradient(135deg,#f9a8d4,#be185d)" : "#fff", color: statusFilter === s ? "#fff" : "#be185d", border: `1.5px solid ${statusFilter === s ? "transparent" : "#fce7f3"}` }}>
               {s.charAt(0).toUpperCase() + s.slice(1)}
@@ -145,7 +175,7 @@ export default function EventDetails() {
                       </span>
                     </td>
                     <td style={{ padding: "10px 14px", color: "#888", fontSize: 12 }}>
-                      {new Date(c.created_at).toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"})}
+                      {new Date(c.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
                     </td>
                     <td style={{ padding: "10px 14px" }}>
                       {c.role !== "admin" && (
