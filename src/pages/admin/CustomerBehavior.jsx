@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, fmt } from "../../utils/api";
+import CustomerName from "../../components/CustomerName";
 
 const RANGES = [30, 90, 180];
 const PINK = "#be185d";
@@ -133,7 +134,9 @@ export default function CustomerBehavior() {
                     {data.winBack.map((customer, index) => (
                       <div key={`${customer.name}-${customer.lastOrder}-${index}`} style={{ display: "flex", justifyContent: "space-between", gap: 12, borderBottom: `1px solid ${LINE}`, paddingBottom: 8 }}>
                         <div>
-                          <strong style={{ color: "#333", fontSize: 13 }}>{customer.name}</strong>
+                          <strong style={{ fontSize: 13 }}>
+                            <CustomerName name={customer.name} status={customer.status} />
+                          </strong>
                           <div style={{ color: "#999", fontSize: 11 }}>{customer.orders} orders · usually every ~{customer.usualGapDays} days</div>
                         </div>
                         <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>

@@ -1,8 +1,10 @@
 import { useState } from "react";
 import "./App.css";
+import "./UIConsistency.css";
  
 import { AppProvider } from "./context/AppContext";
 import { Main } from "./components/Main";
+import { ConfirmHost } from "./components/ConfirmDialog";
  
 import Home from "./pages/Home";
 import Products from "./pages/Products";
@@ -13,23 +15,37 @@ import Register from "./pages/Register";
 import Profile from "./pages/Profile";
 import Checkout from "./pages/Checkout";
 import AdminHome from "./pages/admin/AdminHome";
+import ResetPassword from "./pages/ResetPassword";
  
 export default function App() {
-  const [page, setPage] = useState("home");
+  const [page, setPage] = useState(() => {
+    const query = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const recoveryCallback = hash.get("type") === "recovery" ||
+      hash.get("error_code") === "otp_expired" ||
+      query.get("error_code") === "otp_expired";
+    return query.get("page") === "reset-password" || recoveryCallback
+      ? "reset-password"
+      : "home";
+  });
  
   return (
     <AppProvider>
-      <Main page={page} setPage={setPage}>
-        {page === "home"     && <Home     setPage={setPage} />}
-        {page === "products" && <Products setPage={setPage} />}
-        {page === "cart"     && <Cart     setPage={setPage} />}
-        {page === "about"    && <About    setPage={setPage} />}
-        {page === "login"    && <SignIn   setPage={setPage} />}
-        {page === "signup"   && <Register setPage={setPage} />}
-        {page === "profile"  && <Profile  setPage={setPage} />}
-        {page === "checkout" && <Checkout setPage={setPage} />}
-        {page === "admin"    && <AdminHome setPage={setPage} />}
-      </Main>
+      <>
+        <Main page={page} setPage={setPage}>
+          {page === "home"     && <Home     setPage={setPage} />}
+          {page === "products" && <Products setPage={setPage} />}
+          {page === "cart"     && <Cart     setPage={setPage} />}
+          {page === "about"    && <About    setPage={setPage} />}
+          {page === "login"    && <SignIn   setPage={setPage} />}
+          {page === "reset-password" && <ResetPassword setPage={setPage} />}
+          {page === "signup"   && <Register setPage={setPage} />}
+          {page === "profile"  && <Profile  setPage={setPage} />}
+          {page === "checkout" && <Checkout setPage={setPage} />}
+          {page === "admin"    && <AdminHome setPage={setPage} />}
+        </Main>
+        <ConfirmHost />
+      </>
     </AppProvider>
   );
 }

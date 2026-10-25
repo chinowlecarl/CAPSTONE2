@@ -1,6 +1,8 @@
 export function HeaderNavLink({ label, active, onClick }) {
   return (
     <button
+      className="nav-link"
+      aria-current={active ? "page" : undefined}
       onClick={onClick}
       style={{
         background: "none", border: "none", cursor: "pointer",

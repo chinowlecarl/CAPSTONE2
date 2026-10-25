@@ -8,8 +8,7 @@
 //  2. POST /api/activity/event      -> the browser reports LOGIN / LOGOUT (whitelisted)
 //  3. GET  /api/admin/activity      -> the admin "Activity Log" page
 //
-// Accounts created and profile edits made directly from the browser are logged
-// by database triggers (see phase1_database.sql), so they are not handled here.
+// Accounts are logged by a database trigger in the Supabase admin-features migration.
 //
 // Privacy: request bodies are never stored. Only the small `summary`/`details`
 // built by each rule are saved: no passwords, payment proofs, addresses or images.
@@ -22,14 +21,15 @@ module.exports = function registerActivity(app, { supabase, auth, adminOnly }) {
   const clip = (s, n) => (typeof s === "string" ? s.slice(0, n) : null);
   const peso = (n) => `₱${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  // Every action the system can write (also used to validate the admin filter)
+  // Every action the system can write (also used to validate the admin filter).
+  // PRODUCT_DELETED and USER_STATUS_CHANGED are kept so old log rows still show up in the filter.
   const ACTIONS = [
     "ACCOUNT_CREATED", "LOGIN", "LOGOUT", "PROFILE_UPDATED", "PASSWORD_CHANGED", "PASSWORD_CHANGE_FAILED",
     "ORDER_PLACED", "ORDER_CANCELLED", "PAYMENT_SUBMITTED",
     "ORDER_STATUS_CHANGED", "PAYMENT_APPROVED", "PAYMENT_REJECTED", "PAYMENT_PROOF_VIEWED",
-    "PRODUCT_CREATED", "PRODUCT_UPDATED", "PRODUCT_DELETED",
+    "PRODUCT_CREATED", "PRODUCT_UPDATED", "PRODUCT_ARCHIVED", "PRODUCT_RESTORED", "PRODUCT_PURGED", "PRODUCT_DELETED",
     "CATEGORY_CREATED", "CATEGORY_RENAMED", "CATEGORY_DELETED",
-    "USER_STATUS_CHANGED",
+    "USER_SUSPENDED", "USER_ACTIVATED", "USER_STATUS_CHANGED",
   ];
 
   // ctx: { p: regex groups from the URL, body: request body, out: JSON the route replied with, pre: lookup done before the route ran }
@@ -42,10 +42,14 @@ module.exports = function registerActivity(app, { supabase, auth, adminOnly }) {
       entityId: (c) => c.p[0],
       summary: (c) => `Updated product “${c.out?.product?.title ?? short(c.p[0])}”` },
 
-    { m: "DELETE", re: /^\/api\/products\/([^/]+)$/, action: "PRODUCT_DELETED", entity: "product",
-      before: async (c) => (await supabase.from("products").select("title").eq("id", c.p[0]).maybeSingle()).data,
+    // DELETE /api/products/:id now ARCHIVES the product (see routes/archive.cjs)
+    { m: "DELETE", re: /^\/api\/products\/([^/]+)$/, action: "PRODUCT_ARCHIVED", entity: "product",
       entityId: (c) => c.p[0],
-      summary: (c) => `Deleted product “${c.pre?.title ?? short(c.p[0])}”` },
+      summary: (c) => `Archived product “${c.out?.product?.title ?? short(c.p[0])}” (can be restored for 10 days)` },
+
+    { m: "POST", re: /^\/api\/admin\/products\/([^/]+)\/restore$/, action: "PRODUCT_RESTORED", entity: "product",
+      entityId: (c) => c.p[0],
+      summary: (c) => `Restored product “${c.out?.product?.title ?? short(c.p[0])}” from the archive` },
 
     { m: "POST", re: /^\/api\/orders$/, action: "ORDER_PLACED", entity: "order",
       entityId: (c) => c.out?.order?.id,
@@ -74,10 +78,15 @@ module.exports = function registerActivity(app, { supabase, auth, adminOnly }) {
       entityId: (c) => c.p[0],
       summary: (c) => `Viewed the payment proof for order #${short(c.p[0])}` },
 
-    { m: "PUT", re: /^\/api\/admin\/users\/([^/]+)\/status$/, action: "USER_STATUS_CHANGED", entity: "user",
+    // Who did it = the actor columns. Which user = entity_id + details.target. When = created_at.
+    { m: "PUT", re: /^\/api\/admin\/users\/([^/]+)\/status$/, entity: "user",
+      action: (c) => (c.body?.status === "suspended" ? "USER_SUSPENDED" : "USER_ACTIVATED"),
       entityId: (c) => c.p[0],
-      summary: (c) => `${c.body?.status === "suspended" ? "Suspended" : "Reactivated"} user ${c.out?.user?.username ?? short(c.p[0])}`,
-      details: (c) => ({ status: c.body?.status }) },
+      summary: (c) => `${c.body?.status === "suspended" ? "Suspended" : "Activated"} user ${c.out?.user?.username ?? short(c.p[0])}`,
+      details: (c) => ({
+        status: c.body?.status,
+        target: { id: c.p[0], username: c.out?.user?.username ?? null, name: c.out?.user?.fullname ?? null },
+      }) },
 
     { m: "PUT", re: /^\/api\/me$/, action: "PROFILE_UPDATED", entity: "user",
       summary: () => "Updated their profile details" },
@@ -203,7 +212,7 @@ module.exports = function registerActivity(app, { supabase, auth, adminOnly }) {
         .from(TABLE)
         .select("id,created_at,actor_id,actor_name,actor_role,action,entity_type,entity_id,summary,details,ip", { count: "exact" });
 
-      if (role === "admin" || role === "customer") query = query.eq("actor_role", role);
+      if (role === "admin" || role === "customer" || role === "system") query = query.eq("actor_role", role);
       if (ACTIONS.includes(action)) query = query.eq("action", action);
       if (UUID.test(actor || "")) query = query.eq("actor_id", actor);
       if (YMD.test(from || "")) query = query.gte("created_at", manilaStartUtc(from));
@@ -222,7 +231,27 @@ module.exports = function registerActivity(app, { supabase, auth, adminOnly }) {
         .range(start, start + pageSize - 1);
       if (error) throw error;
 
-      res.json({ rows: data, total: count ?? 0, page, pageSize, actions: ACTIONS });
+      const actorIds = [...new Set(data.map((row) => row.actor_id).filter(Boolean))];
+      let statusByActor = new Map();
+      if (actorIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id,status")
+          .in("id", actorIds);
+        if (profilesError) throw profilesError;
+        statusByActor = new Map(profiles.map((profile) => [profile.id, profile.status]));
+      }
+
+      res.json({
+        rows: data.map((row) => ({
+          ...row,
+          actor_status: statusByActor.get(row.actor_id) || null,
+        })),
+        total: count ?? 0,
+        page,
+        pageSize,
+        actions: ACTIONS,
+      });
     } catch (err) {
       console.error(`[ACTIVITY READ ERROR] ${err.message}`);
       res.status(500).json({ error: "Failed to load the activity log" });

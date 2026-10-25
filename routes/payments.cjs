@@ -7,7 +7,7 @@
 //              PUT  /api/admin/orders/:id/verify-payment  approve | reject
 //              GET  /api/admin/users, /api/admin/orders   (now include customer emails)
 //
-// Admin payment routes also require a session that completed MFA (aal2).
+// Admin routes require MFA (aal2) through the shared adminOnly middleware.
 
 const FILE_SIGNATURES = {
   "image/jpeg": [0xff, 0xd8, 0xff],
@@ -20,24 +20,6 @@ module.exports = function registerPaymentRoutes(
   app,
   { supabase, auth, adminOnly, sanitize },
 ) {
-  // `auth` already verified the token with Supabase, so reading its claims here is safe.
-  function requireAal2(req, res, next) {
-    try {
-      const token = (req.headers.authorization || "").split(" ")[1] || "";
-      const part = token.split(".")[1] || "";
-      const claims = JSON.parse(
-        Buffer.from(part, "base64url").toString("utf8"),
-      );
-      if (claims.aal === "aal2") return next();
-    } catch (_) {
-      /* fall through */
-    }
-    return res.status(403).json({
-      error:
-        "Two-factor authentication required. Log in again and enter your authenticator code.",
-    });
-  }
-
   // Emails live in Supabase Auth (not in `profiles`), so look them up for admin lists.
   async function getEmailMap() {
     const map = {};
@@ -159,7 +141,6 @@ module.exports = function registerPaymentRoutes(
     "/api/admin/payments",
     auth,
     adminOnly,
-    requireAal2,
     async (req, res) => {
       try {
         const { data, error } = await supabase
@@ -167,7 +148,7 @@ module.exports = function registerPaymentRoutes(
           .select(
             "id,user_id,total_amount,shipping_address,status,created_at,updated_at," +
               "payment_status,payment_method,payment_reference,payment_proof_url," +
-              "delivery_status,lalamove_order_id,users:profiles(id,fullname,username)",
+              "delivery_status,lalamove_order_id,users:profiles(id,fullname,username,status)",
           )
           .in("payment_status", ["PENDING_VERIFICATION", "PAID", "REJECTED"])
           .order("updated_at", { ascending: false })
@@ -196,7 +177,6 @@ module.exports = function registerPaymentRoutes(
     "/api/admin/orders/:id/payment-proof",
     auth,
     adminOnly,
-    requireAal2,
     async (req, res) => {
       try {
         const { data: order, error: findErr } = await supabase
@@ -225,7 +205,6 @@ module.exports = function registerPaymentRoutes(
     "/api/admin/orders/:id/verify-payment",
     auth,
     adminOnly,
-    requireAal2,
     async (req, res) => {
       const { decision } = req.body;
       if (!["approve", "reject"].includes(decision))
@@ -300,7 +279,7 @@ module.exports = function registerPaymentRoutes(
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "*, users:profiles(id,fullname,username), order_items(*, products(title))",
+          "*, users:profiles(id,fullname,username,status), order_items(*, products(title))",
         )
         .order("created_at", { ascending: false });
       if (error) throw error;

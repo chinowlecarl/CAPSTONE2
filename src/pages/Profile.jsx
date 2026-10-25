@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { apiFetch, fmt, salePrice } from "../utils/api";
 import { supabase } from "../utils/supabase";
+import ChangePassword from "./ChangePassword";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 const STATUS_STYLES = {
   pending:   { bg: "#fef9c3", color: "#854d0e", label: "Pending" },
@@ -165,6 +167,7 @@ function SecurityTab({ toast }) {
   const [code, setCode]           = useState("");
   const [verifying, setVerifying] = useState(false);
   const [unenrolling, setUnenrolling] = useState(null);
+  const [confirmingFactor, setConfirmingFactor] = useState(null);
 
   const loadFactors = async () => {
     setLoading(true);
@@ -230,12 +233,18 @@ function SecurityTab({ toast }) {
   };
 
   const removeFactor = async (id) => {
-    if (!window.confirm("Disable two-factor authentication? This will remove admin AAL2 protection.")) return;
     setUnenrolling(id);
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: id });
-    if (error) toast(error.message, "error");
-    else { toast("Two-factor authentication disabled.", "info"); await loadFactors(); }
-    setUnenrolling(null);
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: id });
+      if (error) throw error;
+      toast("Two-factor authentication disabled.", "info");
+      setConfirmingFactor(null);
+      await loadFactors();
+    } catch (err) {
+      toast(err.message || "Failed to disable two-factor authentication.", "error");
+    } finally {
+      setUnenrolling(null);
+    }
   };
 
   const verifiedFactor = factors.find((f) => f.status === "verified");
@@ -248,6 +257,7 @@ function SecurityTab({ toast }) {
   );
 
   return (
+    <>
     <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #fce7f3", boxShadow: "0 2px 16px rgba(190,24,93,0.06)", padding: 24 }}>
       <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 900, color: "#1a1a1a", margin: "0 0 6px" }}>
         Two-Factor Authentication
@@ -267,7 +277,7 @@ function SecurityTab({ toast }) {
             </div>
           </div>
           <button
-            onClick={() => removeFactor(verifiedFactor.id)}
+            onClick={() => setConfirmingFactor(verifiedFactor.id)}
             disabled={unenrolling === verifiedFactor.id}
             style={{ background: "#fff", border: "1.5px solid #fecaca", color: "#ef4444", fontWeight: 700, fontSize: 12, padding: "10px 20px", borderRadius: 10, cursor: "pointer" }}
           >
@@ -325,6 +335,17 @@ function SecurityTab({ toast }) {
         </div>
       )}
     </div>
+    <ConfirmDialog
+      open={!!confirmingFactor}
+      title="Disable two-factor authentication?"
+      message="This will remove the additional authenticator protection from your account."
+      confirmLabel="Disable 2FA"
+      destructive
+      busy={!!unenrolling}
+      onCancel={() => setConfirmingFactor(null)}
+      onConfirm={() => removeFactor(confirmingFactor)}
+    />
+    </>
   );
 }
 
@@ -344,6 +365,7 @@ export default function Profile({ setPage }) {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError]     = useState(null);
   const [cancellingId, setCancellingId]   = useState(null);
+  const [pendingCancel, setPendingCancel] = useState(null);
 
   useEffect(() => {
     if (activeTab === "orders" && user) {
@@ -370,8 +392,14 @@ export default function Profile({ setPage }) {
     setLoading(false);
   };
 
-  const cancelOrder = async (orderId) => {
-    if (!window.confirm("Cancel this order? This cannot be undone.")) return;
+  const cancelOrder = (orderId) => {
+    const order = orders.find((item) => item.id === orderId);
+    if (order) setPendingCancel(order);
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!pendingCancel) return;
+    const orderId = pendingCancel.id;
     setCancellingId(orderId);
     try {
       await apiFetch(`/orders/${orderId}`, {
@@ -380,10 +408,11 @@ export default function Profile({ setPage }) {
       });
       setOrders((os) => os.map((o) => o.id === orderId ? { ...o, status: "cancelled" } : o));
       toast("Order cancelled.", "success");
+      setPendingCancel(null);
     } catch (err) {
       toast(err.message || "Failed to cancel order", "error");
     }
-    setCancellingId(null);
+    finally { setCancellingId(null); }
   };
 
   const tabStyle = (tab) => ({
@@ -521,7 +550,22 @@ export default function Profile({ setPage }) {
 
       </div>
       {/* ── SECURITY TAB ── */}
-{activeTab === "security" && <SecurityTab toast={toast} />}
+{activeTab === "security" && (
+  <div style={{ display: "grid", gap: 16 }}>
+    <ChangePassword />
+    <SecurityTab toast={toast} />
+  </div>
+)}
+      <ConfirmDialog
+        open={!!pendingCancel}
+        title="Cancel this order?"
+        message={pendingCancel ? `Cancel order #${pendingCancel.id.slice(0, 8).toUpperCase()}? This cannot be undone.` : ""}
+        confirmLabel="Cancel order"
+        destructive
+        busy={!!cancellingId}
+        onCancel={() => setPendingCancel(null)}
+        onConfirm={confirmCancelOrder}
+      />
     </div>
   );
 }

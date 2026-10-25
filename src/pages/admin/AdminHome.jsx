@@ -2,22 +2,27 @@ import { useState } from "react";
 import { useApp } from "../../context/AppContext";
 import ManageProducts from "./ManageProducts";
 import ManageEvents   from "./ManageEvents";
+import PaymentVerification from "./PaymentVerification";
 import CheckInDesk    from "./CheckInDesk";
 import CreateEvent    from "./CreateEvent";
 import EventDetails   from "./EventDetails";
 import SalesInsights from "./SalesInsights";
 import CustomerBehavior from "./CustomerBehavior";
+import ActivityLog from "./ActivityLog";
+import ArchivedProducts from "./ArchivedProducts";
 
 const TABS = [
   { id: "products", label: "📦 Products",     icon: "📦" },
+  { id: "archive",  label: "🗃 Archived",      icon: "🗃" },
   { id: "add",      label: "➕ Add Product",  icon: "➕" },
   { id: "insights", label: "📈 Insights", icon: "📈" },
   { id: "behavior", label: "👥 Customer Behavior", icon: "👥" },
+  { id: "payments", label: "💳 Payments",      icon: "💳" },
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
-  { id: "checkin", label: "🔍 User Transaction", icon: "🔍" },
+  { id: "activity", label: "🕐 Activity Log",  icon: "🕐" },
+  { id: "checkin",  label: "🔍 User Transaction", icon: "🔍" },
 ];
-
 export default function AdminHome({ setPage }) {
   const { user, logout } = useApp();
   const [tab, setTab] = useState("products");
@@ -53,7 +58,7 @@ export default function AdminHome({ setPage }) {
       {/* Tab nav */}
       <div style={{ background: "#fff", borderBottom: "2px solid #fce7f3", padding: "0 24px", display: "flex", gap: 0, overflowX: "auto" }}>
         {TABS.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button key={t.id} className="admin-nav-link" aria-current={tab === t.id ? "page" : undefined} onClick={() => setTab(t.id)}
             style={{ background: "none", border: "none", cursor: "pointer", padding: "14px 18px", fontSize: 12, fontWeight: 700, letterSpacing: 0.8, whiteSpace: "nowrap", color: tab === t.id ? "#be185d" : "#888", borderBottom: tab === t.id ? "3px solid #be185d" : "3px solid transparent", transition: "all .2s" }}>
             {t.label}
           </button>
@@ -63,12 +68,15 @@ export default function AdminHome({ setPage }) {
       {/* Tab content */}
       <div>
         {tab === "products" && <ManageProducts setPage={setPage} />}
+        {tab === "archive"  && <ArchivedProducts />}
         {tab === "add"      && <CreateEvent    setPage={setPage} />}
         {tab === "orders"   && <ManageEvents   setPage={setPage} />}
         {tab === "users"    && <EventDetails   setPage={setPage} />}
         {tab === "checkin"  && <CheckInDesk    setPage={setPage} />}
         {tab === "insights" && <SalesInsights  setPage={setPage} />}
         {tab === "behavior" && <CustomerBehavior />}
+        {tab === "payments" && <PaymentVerification />}
+        {tab === "activity" && <ActivityLog />}
       </div>
     </div>
   );

@@ -2,12 +2,14 @@ import { useState } from "react";
 import { useApp } from "../context/AppContext";
 
 export default function SignIn({ setPage }) {
-  const { login, verifyTotpChallenge, verifyEmailOtpChallenge, cancelChallenge } = useApp();
+  const { login, verifyTotpChallenge, verifyEmailOtpChallenge, cancelChallenge, requestPasswordReset } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetSending, setResetSending] = useState(false);
 
   // challenge state
   const [challenge, setChallenge] = useState(null); // { type: 'totp'|'email_otp', factorId?, email? }
@@ -48,6 +50,24 @@ export default function SignIn({ setPage }) {
     setVerifying(false);
   };
 
+  const handlePasswordReset = async () => {
+    if (!email.trim()) {
+      setError("Enter your email address first so we can send a reset link.");
+      return;
+    }
+    setResetSending(true);
+    setError("");
+    setNotice("");
+    try {
+      await requestPasswordReset(email);
+      setNotice("If an account exists for that email, a password reset link has been sent.");
+    } catch (err) {
+      setError(err.message || "Could not send a password reset link.");
+    } finally {
+      setResetSending(false);
+    }
+  };
+
   const handleCancel = async () => {
     await cancelChallenge();
     setChallenge(null);
@@ -81,7 +101,6 @@ export default function SignIn({ setPage }) {
             ⚠ {error}
           </div>
         )}
-
         <input
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
@@ -122,6 +141,11 @@ export default function SignIn({ setPage }) {
             ⚠ {error}
           </div>
         )}
+        {notice && (
+          <div role="status" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 14px", color: "#15803d", fontSize: 12, fontWeight: 600, marginBottom: 20 }}>
+            {notice}
+          </div>
+        )}
 
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#888", letterSpacing: 1.5, marginBottom: 6 }}>EMAIL</label>
@@ -137,7 +161,12 @@ export default function SignIn({ setPage }) {
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#888", letterSpacing: 1.5, marginBottom: 6 }}>PASSWORD</label>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <label style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#888", letterSpacing: 1.5 }}>PASSWORD</label>
+            <button type="button" onClick={handlePasswordReset} disabled={resetSending} style={{ background: "none", border: "none", color: "#be185d", fontSize: 11, fontWeight: 700, cursor: resetSending ? "default" : "pointer", padding: 0 }}>
+              {resetSending ? "SENDING..." : "Forgot password?"}
+            </button>
+          </div>
           <div style={{ position: "relative" }}>
             <input
               type={showPw ? "text" : "password"}
