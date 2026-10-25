@@ -1,6 +1,7 @@
 // routes/account.cjs
 //
-//   POST /api/account/change-password   { currentPassword, newPassword }
+//   POST /api/account/change-password        { currentPassword, newPassword }       (logged in)
+//   GET  /api/auth/username-available?username=...                                  (public, rate limited)
 //
 // How it works
 //  1. The current password is checked with a THROWAWAY Supabase client, so the
@@ -86,6 +87,34 @@ module.exports = function registerAccount(app, { supabase, auth, supabaseUrl, ve
     } catch (err) {
       console.error(`[CHANGE PASSWORD ERROR] ${err.message}`);
       res.status(500).json({ error: "Failed to change password" });
+    }
+  });
+
+  // ── username availability (used by the Sign Up form) ──────────────────────
+  // Case-insensitive: "Chris" and "chris" are the same name. The database also has a unique
+  // index (profiles_username_lower_idx), so even if two people sign up at the exact same
+  // moment only one can win. This check just gives a clear message BEFORE they submit.
+  const USERNAME_RE = /^[A-Za-z0-9_.]{3,20}$/;
+  const usernameLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    message: { error: "Too many username checks. Please wait a moment." },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  app.get("/api/auth/username-available", usernameLimiter, async (req, res) => {
+    const username = String(req.query.username || "").trim();
+    if (!USERNAME_RE.test(username))
+      return res.status(400).json({ available: false, error: "Username must be 3-20 characters: letters, numbers, _ or ." });
+    try {
+      const { data, error } = await supabase.rpc("username_exists", { p_username: username });
+      if (error) throw error;
+      if (data) return res.json({ available: false, error: "That username is already taken" });
+      res.json({ available: true });
+    } catch (err) {
+      console.error(`[USERNAME CHECK ERROR] ${err.message}`);
+      res.status(500).json({ error: "Could not check the username right now" });
     }
   });
 };

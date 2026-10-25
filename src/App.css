@@ -7,6 +7,31 @@
   padding: 0;
 }
 
+button, a, select, summary, [role="button"], input[type="checkbox"], input[type="radio"] {
+  cursor: pointer;
+}
+
+button {
+  transition: filter .16s ease, opacity .16s ease, transform .16s ease;
+}
+
+button:not(:disabled):hover {
+  filter: brightness(.96);
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  transition: color .16s ease;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(190, 24, 93, .45);
+  outline-offset: 2px;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }

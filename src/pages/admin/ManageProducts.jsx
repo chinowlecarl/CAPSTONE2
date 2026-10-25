@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { apiFetch, fmt, salePrice } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
+import ConfirmDialog from "../../components/ConfirmDialog";
 
 const CATEGORIES = ["Tops","Bottoms","Dresses","Jackets","Accessories"];
 
@@ -115,6 +116,8 @@ export default function ManageProducts({ setPage }) {
   const [msg, setMsg]           = useState(null);
   const [search, setSearch]     = useState("");
   const [catFilter, setCatFilter] = useState("All");
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [form, setForm] = useState({
     title:"", description:"", price:"", discount:"0", category:"", stock:"1",
@@ -186,10 +189,39 @@ export default function ManageProducts({ setPage }) {
     } catch (err) { showMsg(err.message, "error"); }
   };
 
-  const del = async (id) => {
-    if (!window.confirm("Delete this product?")) return;
-    try { await apiFetch(`/products/${id}`,{method:"DELETE"}); setProducts((ps)=>ps.filter((p)=>p.id!==id)); showMsg("Deleted!"); }
-    catch (err) { showMsg(err.message, "error"); }
+  // Runs when the admin confirms "Delete this item?"
+  const del = async () => {
+    if (!pendingDelete || deleting) return;
+    const target = pendingDelete;
+    setDeleting(true);
+
+    const removeFromScreen = () => {
+      setProducts((ps) => ps.filter((p) => p.id !== target.id));
+      setStats((s) => ({ ...s, total_products: Math.max(0, (s.total_products || 0) - 1) }));
+      showMsg("Item deleted. It can be restored for 10 days.");
+    };
+
+    try {
+      await apiFetch(`/products/${target.id}`, { method: "DELETE" });
+      removeFromScreen();
+    } catch (err) {
+      console.error("Delete item failed:", err);
+      // The server may have removed the item but sent a reply apiFetch couldn't parse,
+      // so check the list before showing an error.
+      try {
+        const fresh = await apiFetch("/products");
+        if (Array.isArray(fresh) && !fresh.some((p) => p.id === target.id)) {
+          removeFromScreen();
+        } else {
+          showMsg(err.message || "Could not delete this item.", "error");
+        }
+      } catch {
+        showMsg(err.message || "Could not delete this item.", "error");
+      }
+    } finally {
+      setDeleting(false);
+      setPendingDelete(null);
+    }
   };
 
   const allCats = ["All", ...CATEGORIES];
@@ -301,7 +333,7 @@ export default function ManageProducts({ setPage }) {
                     <td style={{ padding:"18px 14px" }}>
                       <div style={{ display:"flex", gap:6 }}>
                         <button onClick={()=>openEdit(p)} style={{ background:"#eff6ff", border:"1px solid #bfdbfe", color:"#3b82f6", fontSize:11, fontWeight:700, padding:"5px 12px", borderRadius:8, cursor:"pointer" }}>Edit</button>
-                        <button onClick={()=>del(p.id)} style={{ background:"#fff5f7", border:"1px solid #fce7f3", color:"#be185d", fontSize:11, fontWeight:700, padding:"5px 12px", borderRadius:8, cursor:"pointer" }}>Delete</button>
+                        <button onClick={() => setPendingDelete(p)} style={{ background:"#fff5f7", border:"1px solid #fce7f3", color:"#be185d", fontSize:11, fontWeight:700, padding:"5px 12px", borderRadius:8, cursor:"pointer" }}>Remove Item</button>
                       </div>
                     </td>
                   </tr>
@@ -370,6 +402,18 @@ export default function ManageProducts({ setPage }) {
           </div>
         </div>
       )}
+
+      {/* Delete confirmation popup */}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Delete this item?"
+        message={pendingDelete ? `"${pendingDelete.title}" will be removed from the store. You can restore it within 10 days.` : ""}
+        confirmLabel="Delete"
+        destructive
+        busy={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={del}
+      />
     </div>
   );
 }

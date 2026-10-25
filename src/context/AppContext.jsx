@@ -6,11 +6,22 @@ import { createContext, useContext, useState, useEffect, useRef } from "react";
 export const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
 
+const isPasswordResetLocation = () => {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  return query.get("page") === "reset-password" ||
+    hash.get("type") === "recovery" ||
+    hash.has("error_code");
+};
+
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [passwordRecoveryReady, setPasswordRecoveryReady] = useState(false);
   const [cart, setCart] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const initialHashParams = new URLSearchParams(window.location.hash.slice(1));
+  const recoveryCallbackRef = useRef(initialHashParams.get("type") === "recovery");
 
   const toast = (msg, type = "info") => {
     const id = Date.now();
@@ -53,6 +64,15 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
+      const isResetRoute = isPasswordResetLocation();
+      if (recoveryCallbackRef.current && session) {
+        setPasswordRecoveryReady(true);
+      }
+      if (isResetRoute) {
+        setUser(null);
+        setAuthLoading(false);
+        return;
+      }
       if (!pendingChallengeRef.current) {
         loadProfileForSession(session).finally(() => setAuthLoading(false));
       } else {
@@ -61,9 +81,20 @@ export function AppProvider({ children }) {
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        recoveryCallbackRef.current = true;
+        setPasswordRecoveryReady(true);
+        setUser(null);
+        return;
+      }
       if (pendingChallengeRef.current) return; // ignore session changes mid-challenge
-      loadProfileForSession(session);
-      if (event === "SIGNED_OUT") setCart([]);
+      const isResetRoute = isPasswordResetLocation();
+      if (isResetRoute) setUser(null);
+      else loadProfileForSession(session);
+      if (event === "SIGNED_OUT") {
+        setCart([]);
+        setPasswordRecoveryReady(false);
+      }
     });
 
     return () => listener.subscription.unsubscribe();
@@ -78,6 +109,37 @@ export function AppProvider({ children }) {
   }, [user?.id]);
 
   // ── AUTH ──────────────────────────────────────────────────
+  const reportActivity = async (action) => {
+    try {
+      await apiFetch("/activity/event", {
+        method: "POST",
+        body: JSON.stringify({ action }),
+      });
+    } catch (err) {
+      console.warn(`Could not record ${action.toLowerCase()} activity: ${err.message}`);
+    }
+  };
+
+  const requestPasswordReset = async (email) => {
+    const redirectTo = `${window.location.origin}/?page=reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) throw new Error(error.message);
+  };
+
+  const completePasswordReset = async (newPassword) => {
+    if (!passwordRecoveryReady) {
+      throw new Error("Open the password reset link from your email before setting a new password.");
+    }
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw new Error(sessionError.message);
+    if (!session) throw new Error("Your reset link is invalid or has expired. Request a new one.");
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw new Error(error.message);
+    await supabase.auth.signOut();
+    setUser(null);
+    setPasswordRecoveryReady(false);
+  };
 
   // Step 1: password check + branch to the right second factor.
   // Returns one of:
@@ -103,10 +165,12 @@ export function AppProvider({ children }) {
         const totp = factors?.totp?.find((f) => f.status === "verified");
         if (!totp) {
           pendingChallengeRef.current = false;
+          await reportActivity("LOGIN");
           return { status: "ok" }; // admin has no factor enrolled yet — let through, nag elsewhere
         }
         return { status: "totp_required", factorId: totp.id };
       }
+      await reportActivity("LOGIN");
       return { status: "ok" };
     }
 
@@ -138,6 +202,7 @@ export function AppProvider({ children }) {
     pendingChallengeRef.current = false;
     const { data: { session } } = await supabase.auth.getSession();
     await loadProfileForSession(session);
+    await reportActivity("LOGIN");
     toast(`Welcome back! 🌸`, "success");
   };
 
@@ -147,6 +212,7 @@ export function AppProvider({ children }) {
 
     pendingChallengeRef.current = false;
     await loadProfileForSession(data.session);
+    await reportActivity("LOGIN");
     toast(`Welcome back! 🌸`, "success");
   };
 
@@ -159,6 +225,7 @@ export function AppProvider({ children }) {
   const completeLogin = () => {}; // kept for compatibility, no-op now (handled in verify* above)
 
   const logout = async () => {
+    if (user) await reportActivity("LOGOUT");
     await supabase.auth.signOut();
     setUser(null);
     setCart([]);
@@ -178,7 +245,16 @@ export function AppProvider({ children }) {
         },
       },
     });
-    if (error) throw new Error(error.message);
+       if (error) {
+      const m = error.message.toLowerCase();
+      if (m.includes("already registered")) throw new Error("That email is already taken. Try signing in instead.");
+      if (/database error/i.test(error.message)) throw new Error("That phone number or username is already used by another account");
+      if (error.status === 429) throw new Error("Too many attempts. Please wait a minute and try again.");
+      throw new Error(error.message);
+    }
+    // Confirm-email ON: an existing email comes back with no error and no identities
+    if (data.user && data.user.identities?.length === 0)
+      throw new Error("That email is already taken. Try signing in instead.");
     return data;
   };
 
@@ -281,8 +357,9 @@ export function AppProvider({ children }) {
   
 
     const ctx = {
-    user, authLoading, cart, toasts,
+    user, authLoading, cart, toasts, passwordRecoveryReady,
     login, logout, registerUser, completeLogin, completeRegister, updateProfile,
+    requestPasswordReset, completePasswordReset,
     verifyTotpChallenge, verifyEmailOtpChallenge, cancelChallenge,
     addToCart, removeFromCart, updateQty, clearCart,
     toast,
