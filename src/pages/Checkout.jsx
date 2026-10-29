@@ -5,8 +5,6 @@ import { fmt, salePrice, apiFetch } from "../utils/api";
 const PAYMENT_METHODS = [
   { id: "cod",    label: "Cash on Delivery",  icon: "💵", desc: "Pay when your order arrives" },
   { id: "gcash",  label: "GCash",             icon: "📱", desc: "Pay via GCash mobile wallet" },
-  { id: "maya",   label: "Maya",              icon: "💳", desc: "Pay via Maya (PayMaya)" },
-  { id: "card",   label: "Credit / Debit Card", icon: "🏦", desc: "Visa, Mastercard accepted" },
 ];
 
 // TODO: replace with the real business QR code images once provided
