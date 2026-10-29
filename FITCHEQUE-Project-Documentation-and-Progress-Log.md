@@ -10,6 +10,9 @@ GCash or Maya payment proof. Admins manage products, orders, payments, users,
 insights, and customer activity. Paid orders can be sent to Lalamove for delivery
 booking.
 
+See [PROJECT-FLOWCHART.md](./PROJECT-FLOWCHART.md) for a high-level diagram of
+the application components and customer, admin, payment, and delivery flows.
+
 ### Live setup
 
 - Frontend: React and Vite, hosted on Vercel.
@@ -54,6 +57,31 @@ Backend private configuration:
 Keep actual values in the deployment environment or an untracked local `.env`.
 Use `.env.example` as a starting template and verify its public endpoint values
 for the target environment; never put private service credentials in it.
+
+### Lalamove delivery status updates
+
+The `lalamove-webhook` Edge Function accepts Lalamove notifications, verifies
+each notification against Lalamove's signed Order Details API, and saves the
+provider status and tracking link. The customer order screen and admin Payments
+screen refresh every 30 seconds while open.
+
+1. Apply the schema migration with `supabase db push`.
+2. Deploy the webhook with
+   `supabase functions deploy lalamove-webhook --project-ref <project-ref>`.
+3. Generate a long random token and save it as the Edge Function secret
+   `LALAMOVE_WEBHOOK_TOKEN`. Do not commit the value.
+4. In the Lalamove Partner Portal, open **Developers → Webhook**, choose the
+   matching sandbox or production environment and v3 webhook format, and set
+   the URL to
+   `https://<project-ref>.supabase.co/functions/v1/lalamove-webhook?token=<token>`.
+   Use the same token configured in Supabase.
+5. Ensure the Lalamove API credentials configured for
+   `create-lalamove-order` are also available to the webhook function. Use
+   sandbox credentials with `https://rest.sandbox.lalamove.com`, or production
+   credentials with `https://rest.lalamove.com`.
+6. Confirm delivery updates appear in the Partner Portal's **Webhook Attempts**
+   and in customer/admin order details. The webhook returns non-2xx errors when
+   it cannot verify or save a status, so Lalamove can retry the notification.
 
 ## 3. Database (Supabase)
 

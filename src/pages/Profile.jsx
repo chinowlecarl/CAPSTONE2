@@ -80,6 +80,24 @@ function OrderCard({ order, onCancel, cancelling }) {
       {open && (
         <div style={{ borderTop: "1px solid #fce7f3", background: "#fff5f7", padding: "16px 18px" }}>
 
+          {order.lalamove_order_id && (
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 10, fontWeight: 800, color: "#be185d", letterSpacing: 1.5, margin: "0 0 6px" }}>
+                DELIVERY
+              </p>
+              <p style={{ fontSize: 13, color: "#555", margin: "0 0 6px" }}>
+                {order.lalamove_status
+                  ? order.lalamove_status.replaceAll("_", " ")
+                  : order.delivery_status?.replaceAll("_", " ") || "Booking"}
+              </p>
+              {order.lalamove_share_link && (
+                <a href={order.lalamove_share_link} target="_blank" rel="noreferrer" style={{ color: "#be185d", fontSize: 12, fontWeight: 700 }}>
+                  Track with Lalamove
+                </a>
+              )}
+            </div>
+          )}
+
           {/* Shipping info */}
           <div style={{ marginBottom: 14 }}>
             <p style={{ fontSize: 10, fontWeight: 800, color: "#be185d", letterSpacing: 1.5, margin: "0 0 6px" }}>
@@ -364,19 +382,45 @@ export default function Profile({ setPage }) {
   const [orders, setOrders]       = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError]     = useState(null);
+  const [ordersRefreshError, setOrdersRefreshError] = useState(null);
   const [cancellingId, setCancellingId]   = useState(null);
   const [pendingCancel, setPendingCancel] = useState(null);
 
   useEffect(() => {
     if (activeTab === "orders" && user) {
-      setOrdersLoading(true);
-      setOrdersError(null);
-      apiFetch("/orders")
-        .then(setOrders)
-        .catch((err) => setOrdersError(err.message))
-        .finally(() => setOrdersLoading(false));
+      let active = true;
+      let refreshing = false;
+      const loadOrders = async (initial = false) => {
+        if (refreshing) return;
+        refreshing = true;
+        if (initial) {
+          setOrdersLoading(true);
+          setOrdersError(null);
+        }
+        try {
+          const result = await apiFetch("/orders");
+          if (active) {
+            setOrders(result);
+            setOrdersError(null);
+            setOrdersRefreshError(null);
+          }
+        } catch (err) {
+          if (active && initial) setOrdersError(err.message);
+          else if (active) setOrdersRefreshError(err.message);
+        } finally {
+          if (active && initial) setOrdersLoading(false);
+          refreshing = false;
+        }
+      };
+
+      loadOrders(true);
+      const interval = window.setInterval(() => loadOrders(), 30000);
+      return () => {
+        active = false;
+        window.clearInterval(interval);
+      };
     }
-  }, [activeTab, user]);
+  }, [activeTab, user?.id]);
 
   if (!user) return (
     <div style={{ textAlign: "center", padding: "80px 24px" }}>
@@ -532,7 +576,12 @@ export default function Profile({ setPage }) {
 
             {!ordersLoading && !ordersError && orders.length > 0 && (
               <div>
-                <p style={{ fontSize: 12, color: "#aaa", fontWeight: 600, margin: "0 0 14px", letterSpacing: 0.5 }}>
+                    {ordersRefreshError && (
+                      <p role="status" style={{ color: "#be185d", fontSize: 12, margin: "0 0 12px" }}>
+                        Delivery updates could not refresh: {ordersRefreshError}
+                      </p>
+                    )}
+                    <p style={{ fontSize: 12, color: "#aaa", fontWeight: 600, margin: "0 0 14px", letterSpacing: 0.5 }}>
                   {orders.length} order{orders.length !== 1 ? "s" : ""} found — tap any order to expand
                 </p>
                 {orders.map((order) => (

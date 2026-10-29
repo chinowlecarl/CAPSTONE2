@@ -148,7 +148,8 @@ module.exports = function registerPaymentRoutes(
           .select(
             "id,user_id,total_amount,shipping_address,status,created_at,updated_at," +
               "payment_status,payment_method,payment_reference,payment_proof_url," +
-              "delivery_status,lalamove_order_id,users:profiles(id,fullname,username,status)",
+              "delivery_status,lalamove_order_id,lalamove_status,lalamove_share_link," +
+              "users:profiles(id,fullname,username,status)",
           )
           .in("payment_status", ["PENDING_VERIFICATION", "PAID", "REJECTED"])
           .order("updated_at", { ascending: false })
