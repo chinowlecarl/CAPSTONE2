@@ -14,6 +14,8 @@ const isPasswordResetLocation = () => {
     hash.has("error_code");
 };
 
+const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
+
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -139,6 +141,76 @@ export function AppProvider({ children }) {
     } else {
       setCart([]);
     }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+
+    const activityKey = `fitcheque:last-activity:${user.id}`;
+    let lastActivity = Number(localStorage.getItem(activityKey)) || Date.now();
+    let lastPersistedActivity = lastActivity;
+    let timeoutId;
+    let signingOut = false;
+    localStorage.setItem(activityKey, String(lastActivity));
+
+    const expireSession = async () => {
+      if (signingOut || Date.now() - lastActivity < INACTIVITY_TIMEOUT_MS) return;
+      signingOut = true;
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+      } catch (error) {
+        signingOut = false;
+        console.error("Could not sign out after inactivity:", error.message);
+        timeoutId = window.setTimeout(expireSession, 30_000);
+        return;
+      }
+      localStorage.removeItem(activityKey);
+      setUser(null);
+      setCart([]);
+      toast("You were signed out after 1 hour of inactivity.", "info");
+    };
+
+    const scheduleExpiry = () => {
+      window.clearTimeout(timeoutId);
+      const remaining = INACTIVITY_TIMEOUT_MS - (Date.now() - lastActivity);
+      timeoutId = window.setTimeout(expireSession, Math.max(remaining, 0));
+    };
+
+    const recordActivity = () => {
+      if (signingOut) return;
+      lastActivity = Date.now();
+      if (lastActivity - lastPersistedActivity >= 10_000) {
+        localStorage.setItem(activityKey, String(lastActivity));
+        lastPersistedActivity = lastActivity;
+      }
+      scheduleExpiry();
+    };
+
+    const handleStorage = (event) => {
+      if (event.key !== activityKey || !event.newValue) return;
+      const sharedActivity = Number(event.newValue);
+      if (Number.isFinite(sharedActivity) && sharedActivity > lastActivity) {
+        lastActivity = sharedActivity;
+        lastPersistedActivity = sharedActivity;
+        scheduleExpiry();
+      }
+    };
+
+    const activityEvents = ["pointerdown", "keydown", "touchstart", "scroll"];
+    activityEvents.forEach((eventName) => {
+      window.addEventListener(eventName, recordActivity, { passive: true });
+    });
+    window.addEventListener("storage", handleStorage);
+    scheduleExpiry();
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      activityEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, recordActivity);
+      });
+      window.removeEventListener("storage", handleStorage);
+    };
   }, [user?.id]);
 
   // ── AUTH ──────────────────────────────────────────────────
@@ -299,6 +371,7 @@ export function AppProvider({ children }) {
   const logout = async () => {
     if (user) await reportActivity("LOGOUT");
     await supabase.auth.signOut();
+    if (user?.id) localStorage.removeItem(`fitcheque:last-activity:${user.id}`);
     setUser(null);
     setCart([]);
     toast("Logged out successfully.", "info");
