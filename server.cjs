@@ -172,6 +172,10 @@ app.get("/api/me", auth, async (req, res) => {
   }
 });
 
+app.get("/api/admin/session", auth, adminOnly, (req, res) => {
+  res.json({ id: req.user.id, role: req.user.role });
+});
+
 app.put("/api/me", auth, async (req, res) => {
   let { fullname, phone, address } = req.body;
   fullname = sanitize(fullname);
@@ -198,14 +202,41 @@ app.put("/api/me", auth, async (req, res) => {
 // PRODUCTS
 // ============================================================
 
+const SOLD_PRODUCT_RETENTION_MS = 72 * 60 * 60 * 1000;
+const PUBLIC_PRODUCT_FIELDS = "id,title,description,price,discount,category,image_url,stock,featured,created_at";
+const filterActiveProducts = (query, search = "") => {
+  const cutoff = new Date(Date.now() - SOLD_PRODUCT_RETENTION_MS).toISOString();
+  query = query.is("archived_at", null);
+  if (!search) return query.or(`sold_at.is.null,sold_at.gt.${cutoff}`);
+
+  const pattern = `%${sanitize(search)}%`;
+  return query.or([
+    `and(sold_at.is.null,title.ilike.${pattern})`,
+    `and(sold_at.is.null,description.ilike.${pattern})`,
+    `and(sold_at.gt.${cutoff},title.ilike.${pattern})`,
+    `and(sold_at.gt.${cutoff},description.ilike.${pattern})`,
+  ].join(","));
+};
+
 app.get("/api/products", async (req, res) => {
   const { category, search } = req.query;
   try {
-    let q = supabase.from("products").select("*")
-      .is("archived_at", null)
-      .order("created_at", { ascending: false });
+    const isPaginated = req.query.limit !== undefined || req.query.offset !== undefined;
+    const limit = isPaginated ? Number(req.query.limit ?? 24) : null;
+    const offset = isPaginated ? Number(req.query.offset ?? 0) : 0;
+    if (isPaginated && (
+      !Number.isInteger(limit) || limit < 1 || limit > 48 ||
+      !Number.isInteger(offset) || offset < 0
+    )) {
+      return res.status(400).json({ error: "Invalid product pagination parameters" });
+    }
+
+    let q = filterActiveProducts(
+      supabase.from("products").select(isPaginated ? PUBLIC_PRODUCT_FIELDS : "*"),
+      typeof search === "string" ? search : "",
+    ).order("created_at", { ascending: false }).order("id", { ascending: true });
     if (category && category !== "All") q = q.eq("category", sanitize(category));
-    if (search) q = q.or(`title.ilike.%${sanitize(search)}%,description.ilike.%${sanitize(search)}%`);
+    if (isPaginated) q = q.range(offset, offset + limit - 1);
     const { data, error } = await q;
     if (error) throw error;
     res.json(data);
@@ -217,15 +248,14 @@ app.get("/api/products", async (req, res) => {
 
 app.get("/api/products/featured", async (req, res) => {
   try {
-    const { data, error } = await supabase.from("products").select("*")
+    const { data, error } = await filterActiveProducts(supabase.from("products").select("*"))
       .eq("featured", true)
-      .is("archived_at", null)
       .order("created_at", { ascending: false }).limit(8);
     if (error) throw error;
     if (!data || data.length === 0) {
-      const { data: fallback, error: fallbackErr } = await supabase
-        .from("products").select("*")
-        .is("archived_at", null)
+      const { data: fallback, error: fallbackErr } = await filterActiveProducts(
+        supabase.from("products").select("*"),
+      )
         .order("created_at", { ascending: false }).limit(8);
       if (fallbackErr) throw fallbackErr;
       return res.json(fallback);
@@ -237,10 +267,37 @@ app.get("/api/products/featured", async (req, res) => {
   }
 });
 
+app.get("/api/products/home", async (req, res) => {
+  try {
+    const productsQuery = () => filterActiveProducts(
+      supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
+    ).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(8);
+    const featuredQuery = () => filterActiveProducts(
+      supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
+    ).eq("featured", true).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(4);
+
+    const [{ data: products, error: productsError }, { data: featured, error: featuredError }] =
+      await Promise.all([productsQuery(), featuredQuery()]);
+    if (productsError) throw productsError;
+    if (featuredError) throw featuredError;
+    const arrivals = products || [];
+    const featuredProducts = featured?.length ? featured : arrivals.slice(0, 4);
+    const items = [...new Map([...arrivals, ...featuredProducts].map((product) => [product.id, product])).values()];
+    res.json({
+      items,
+      arrivalIds: arrivals.map((product) => product.id),
+      featuredIds: featuredProducts.map((product) => product.id),
+    });
+  } catch (err) {
+    console.error(`[HOME PRODUCTS ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to fetch home products" });
+  }
+});
+
 app.get("/api/products/:id", async (req, res) => {
   try {
-    const { data, error } = await supabase.from("products").select("*")
-      .eq("id", req.params.id).is("archived_at", null).single();
+    const { data, error } = await filterActiveProducts(supabase.from("products").select("*"))
+      .eq("id", req.params.id).single();
     if (error || !data) return res.status(404).json({ error: "Product not found" });
     res.json(data);
   } catch (err) { res.status(500).json({ error: "Failed to fetch product" }); }
@@ -520,13 +577,13 @@ app.put("/api/orders/:id", auth, async (req, res) => {
 app.get("/api/admin/stats", auth, adminOnly, async (req, res) => {
   try {
     const [p, u, o, ls] = await Promise.all([
-      supabase.from("products").select("id", { count: "exact" }).is("archived_at", null),
+      filterActiveProducts(supabase.from("products").select("id", { count: "exact" })),
       supabase
         .from("profiles")
         .select("id", { count: "exact" })
         .eq("role", "customer"),
       supabase.from("orders").select("id,total_amount", { count: "exact" }),
-      supabase.from("products").select("id", { count: "exact" }).is("archived_at", null).lt("stock", 5),
+      filterActiveProducts(supabase.from("products").select("id", { count: "exact" })).lt("stock", 5),
     ]);
     res.json({
       total_products: p.count || 0,

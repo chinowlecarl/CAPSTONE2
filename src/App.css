@@ -44,3 +44,42 @@ a {
 ::-webkit-scrollbar       { width: 6px; }
 ::-webkit-scrollbar-track { background: #fff5f7; }
 ::-webkit-scrollbar-thumb { background: #f9a8d4; border-radius: 3px; }
+
+.checkout-layout {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.checkout-summary {
+  position: sticky;
+  top: 80px;
+}
+
+.payment-proof-actions {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 760px) {
+  .checkout-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding: 24px 16px !important;
+  }
+
+  .checkout-summary {
+    position: static !important;
+  }
+
+  .checkout-details-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .payment-proof-card {
+    padding: 28px 18px !important;
+  }
+
+  .payment-proof-actions {
+    flex-direction: column;
+  }
+}

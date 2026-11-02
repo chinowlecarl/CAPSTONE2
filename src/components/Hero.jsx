@@ -12,11 +12,14 @@ export function Hero({ featured, setPage }) {
             display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
             gap: 4, borderRadius: 12, overflow: "hidden", height: 280,
           }}>
-            {featured.slice(0, 4).map((p) => (
+            {featured.slice(0, 4).map((p, index) => (
               <div key={p.id} style={{ position: "relative", overflow: "hidden" }}>
                 <img
                   src={p.image_url}
                   alt={p.title}
+                  loading={index === 0 ? "eager" : "lazy"}
+                  fetchPriority={index === 0 ? "high" : "auto"}
+                  decoding="async"
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   onError={(e) =>
                     (e.target.src = "https://via.placeholder.com/300x280/fce7f3/be185d?text=FITCHEQUE")
