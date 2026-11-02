@@ -26,13 +26,32 @@ function StatusBadge({ status }) {
   );
 }
 
-function OrderCard({ order, onCancel, cancelling }) {
+function OrderCard({ order, onCancel, cancelling, loadItems }) {
   const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  const [itemsLoading, setItemsLoading] = useState(false);
+  const [itemsError, setItemsError] = useState("");
+  const [itemsLoaded, setItemsLoaded] = useState(false);
   const date = new Date(order.created_at).toLocaleDateString("en-PH", {
     year: "numeric", month: "short", day: "numeric",
   });
 
   const canCancel = order.status === "pending" || order.status === "confirmed";
+  const toggleOpen = async () => {
+    const willOpen = !open;
+    setOpen(willOpen);
+    if (!willOpen || itemsLoaded || itemsLoading) return;
+    setItemsLoading(true);
+    setItemsError("");
+    try {
+      setItems(await loadItems(order.id));
+      setItemsLoaded(true);
+    } catch (error) {
+      setItemsError(error.message || "Could not load order items.");
+    } finally {
+      setItemsLoading(false);
+    }
+  };
 
   return (
     <div style={{
@@ -42,7 +61,7 @@ function OrderCard({ order, onCancel, cancelling }) {
     }}>
       {/* Order header row */}
       <div
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggleOpen}
         style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "14px 18px", background: "#fff", cursor: "pointer",
@@ -110,8 +129,13 @@ function OrderCard({ order, onCancel, cancelling }) {
           <p style={{ fontSize: 10, fontWeight: 800, color: "#be185d", letterSpacing: 1.5, margin: "0 0 10px" }}>
             ITEMS ORDERED
           </p>
+          {itemsLoading ? (
+            <p role="status" style={{ color: "#be185d", fontSize: 13 }}>Loading order items...</p>
+          ) : itemsError ? (
+            <p role="alert" style={{ color: "#be185d", fontSize: 13 }}>{itemsError}</p>
+          ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {order.order_items?.map((item, idx) => {
+            {items.map((item, idx) => {
               const product = item.products || {};
               const imgUrl  = product.image_url || `https://placehold.co/52/fce7f3/be185d?text=?`;
               const title   = product.title || "Unknown Product";
@@ -143,6 +167,7 @@ function OrderCard({ order, onCancel, cancelling }) {
               );
             })}
           </div>
+          )}
 
           {/* Total row */}
           <div style={{
@@ -441,6 +466,8 @@ export default function Profile({ setPage }) {
     if (order) setPendingCancel(order);
   };
 
+  const loadOrderItems = (orderId) => apiFetch(`/orders/${orderId}/items`);
+
   const confirmCancelOrder = async () => {
     if (!pendingCancel) return;
     const orderId = pendingCancel.id;
@@ -590,6 +617,7 @@ export default function Profile({ setPage }) {
                     order={order}
                     onCancel={cancelOrder}
                     cancelling={cancellingId === order.id}
+                    loadItems={loadOrderItems}
                   />
                 ))}
               </div>
