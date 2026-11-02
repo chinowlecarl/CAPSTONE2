@@ -179,6 +179,7 @@ export function AppProvider({ children }) {
   // Returns one of:
   //   { status: "ok" }
   //   { status: "totp_required", factorId }
+  //   { status: "totp_setup_required", factorId, qrCode, secret }
   //   { status: "email_otp_required", email }
   const login = async (email, password) => {
     pendingChallengeRef.current = true;
@@ -202,7 +203,20 @@ export function AppProvider({ children }) {
           if (factorsError) throw new Error(factorsError.message);
           const totp = factors?.totp?.find((factor) => factor.status === "verified");
           if (!totp) {
-            throw new Error("Admin accounts must set up an authenticator before signing in.");
+            for (const factor of factors?.totp || []) {
+              const { error: unenrollError } = await supabase.auth.mfa.unenroll({ factorId: factor.id });
+              if (unenrollError) throw new Error(unenrollError.message);
+            }
+            const { data: enrollment, error: enrollmentError } = await supabase.auth.mfa.enroll({
+              factorType: "totp",
+            });
+            if (enrollmentError) throw new Error(enrollmentError.message);
+            return {
+              status: "totp_setup_required",
+              factorId: enrollment.id,
+              qrCode: enrollment.totp.qr_code,
+              secret: enrollment.totp.secret,
+            };
           }
           return { status: "totp_required", factorId: totp.id };
         }

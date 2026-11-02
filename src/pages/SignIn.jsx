@@ -18,6 +18,7 @@ export default function SignIn({ setPage }) {
   const [resending, setResending] = useState(false);
   const verifyingRef = useRef(false);
   const resendingRef = useRef(false);
+  const isEmailOtp = challenge?.type === "email_otp";
 
   const handleLogin = async () => {
     if (!email || !password) { setError("Please fill in all fields."); return; }
@@ -26,6 +27,13 @@ export default function SignIn({ setPage }) {
       const result = await login(email, password);
       if (result.status === "totp_required") {
         setChallenge({ type: "totp", factorId: result.factorId });
+      } else if (result.status === "totp_setup_required") {
+        setChallenge({
+          type: "totp_setup",
+          factorId: result.factorId,
+          qrCode: result.qrCode,
+          secret: result.secret,
+        });
       } else if (result.status === "email_otp_required") {
         setChallenge({ type: "email_otp", email: result.email });
         setNotice("");
@@ -40,23 +48,23 @@ export default function SignIn({ setPage }) {
 
   const handleVerify = async () => {
     if (!challenge || verifyingRef.current) return;
-    const expectedLength = challenge.type === "totp" ? 6 : 8;
+    const expectedLength = isEmailOtp ? 8 : 6;
     if (code.length !== expectedLength) {
-      setError(`Enter the ${expectedLength}-digit code from your ${challenge.type === "totp" ? "authenticator app" : "email"}.`);
+      setError(`Enter the ${expectedLength}-digit code from your ${isEmailOtp ? "email" : "authenticator app"}.`);
       return;
     }
     verifyingRef.current = true;
     setVerifying(true); setError("");
     try {
-      if (challenge.type === "totp") {
-        await verifyTotpChallenge(challenge.factorId, code);
-      } else {
+      if (isEmailOtp) {
         await verifyEmailOtpChallenge(challenge.email, code);
+      } else {
+        await verifyTotpChallenge(challenge.factorId, code);
       }
       setPage("home");
     } catch (err) {
       setError(
-        challenge.type === "email_otp" && /token.*(expired|invalid)|(expired|invalid).*token/i.test(err.message)
+        isEmailOtp && /token.*(expired|invalid)|(expired|invalid).*token/i.test(err.message)
           ? "That code is invalid or expired. Request a new code, then use the latest email."
           : err.message
       );
@@ -112,23 +120,43 @@ export default function SignIn({ setPage }) {
   const cardStyle = { position: "relative", zIndex: 2, width: "100%", maxWidth: 380, background: "#fff", borderRadius: 20, boxShadow: "0 20px 60px rgba(190, 24, 93, 0.3)", padding: "48px 40px" };
   const bgStyle = { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, position: "relative", overflow: "hidden" };
 
-  // ── CHALLENGE SCREEN (TOTP or email code) ──────────────────
+  // ── CHALLENGE SCREEN (TOTP setup, TOTP verification, or email code) ──
   if (challenge) return (
     <div style={bgStyle}>
       <div style={{ position: "absolute", inset: 0, backgroundImage: "url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&q=70')", backgroundSize: "cover", backgroundPosition: "center", zIndex: 0 }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(252,231,243,0.88) 0%, rgba(251,207,232,0.88) 40%, rgba(249,168,212,0.88) 100%)", zIndex: 1 }} />
       <div style={cardStyle}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 40, marginBottom: 10 }}>{challenge.type === "totp" ? "🔐" : "📧"}</div>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>{challenge.type === "email_otp" ? "📧" : "🔐"}</div>
           <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, color: "#1a1a1a", margin: "0 0 6px" }}>
-            {challenge.type === "totp" ? "Enter Authenticator Code" : "Check Your Email"}
+            {challenge.type === "totp_setup"
+              ? "Set Up Admin Authentication"
+              : challenge.type === "totp"
+                ? "Enter Authenticator Code"
+                : "Check Your Email"}
           </h2>
           <p style={{ color: "#aaa", fontSize: 12 }}>
-            {challenge.type === "totp"
-              ? "Enter the 6-digit code from your authenticator app"
-              : `We sent an 8-digit code to ${challenge.email}`}
+            {challenge.type === "totp_setup"
+              ? "Scan this QR code with an authenticator app, then enter its 6-digit code."
+              : challenge.type === "totp"
+                ? "Enter the 6-digit code from your authenticator app"
+                : `We sent an 8-digit code to ${challenge.email}`}
           </p>
         </div>
+
+        {challenge.type === "totp_setup" && (
+          <div style={{ textAlign: "center", marginBottom: 20 }}>
+            <img
+              src={challenge.qrCode}
+              alt="Authenticator setup QR code"
+              style={{ width: 180, height: 180, padding: 8, background: "#fff", border: "1px solid #fce7f3", borderRadius: 12 }}
+            />
+            <p style={{ color: "#888", fontSize: 11, margin: "12px 0 4px" }}>Can’t scan? Enter this setup key manually:</p>
+            <code style={{ display: "inline-block", color: "#be185d", fontSize: 12, fontWeight: 700, letterSpacing: 1, overflowWrap: "anywhere" }}>
+              {challenge.secret}
+            </code>
+          </div>
+        )}
 
         {error && (
           <div style={{ background: "#fff5f7", border: "1px solid #fce7f3", borderLeft: "4px solid #be185d", borderRadius: 8, padding: "10px 14px", color: "#be185d", fontSize: 12, fontWeight: 600, marginBottom: 20 }}>
@@ -141,19 +169,19 @@ export default function SignIn({ setPage }) {
           </div>
         )}
         <label htmlFor="verification-code" style={{ display: "block", color: "#888", fontSize: 10, fontWeight: 800, letterSpacing: 1.5, marginBottom: 6, textAlign: "center" }}>
-          {challenge.type === "totp" ? "AUTHENTICATOR CODE · 6 DIGITS" : "EMAIL VERIFICATION CODE · 8 DIGITS"}
+          {challenge.type === "email_otp" ? "EMAIL VERIFICATION CODE · 8 DIGITS" : "AUTHENTICATOR CODE · 6 DIGITS"}
         </label>
         <input
           id="verification-code"
           value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, challenge.type === "totp" ? 6 : 8))}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, isEmailOtp ? 8 : 6))}
           onKeyDown={(e) => e.key === "Enter" && handleVerify()}
-          placeholder={`${challenge.type === "totp" ? 6 : 8}-digit code`}
-          maxLength={challenge.type === "totp" ? 6 : 8}
+          placeholder={`${isEmailOtp ? 8 : 6}-digit code`}
+          maxLength={isEmailOtp ? 8 : 6}
           inputMode="numeric"
           autoComplete="one-time-code"
-          aria-label={challenge.type === "totp" ? "6-digit authenticator code" : "8-digit email verification code"}
-          style={{ width: "100%", padding: "14px", border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 22, letterSpacing: challenge.type === "totp" ? 8 : 5, textAlign: "center", outline: "none", background: "#fff5f7", boxSizing: "border-box", marginBottom: 20, fontFamily: "monospace" }}
+          aria-label={isEmailOtp ? "8-digit email verification code" : "6-digit authenticator code"}
+          style={{ width: "100%", padding: "14px", border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 22, letterSpacing: isEmailOtp ? 5 : 8, textAlign: "center", outline: "none", background: "#fff5f7", boxSizing: "border-box", marginBottom: 20, fontFamily: "monospace" }}
         />
 
         <button
@@ -163,7 +191,7 @@ export default function SignIn({ setPage }) {
         >
           {verifying ? "VERIFYING..." : "VERIFY & CONTINUE"}
         </button>
-        {challenge.type === "email_otp" && (
+        {isEmailOtp && (
           <button
             type="button"
             onClick={handleResendCode}
