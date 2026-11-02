@@ -27,6 +27,23 @@ export async function apiFetch(path, options = {}) {
   return data;
 }
 
+export async function publicApiFetch(path, options = {}) {
+  const res = await fetch(`${API}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+    ...options,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const error = new Error(data.error || "Something went wrong");
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
 export const fmt = (n) => `₱${Number(n).toFixed(2)}`;
 export const salePrice = (price, discount) =>
   discount > 0 ? price * (1 - discount / 100) : price;

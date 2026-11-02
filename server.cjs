@@ -249,6 +249,7 @@ app.get("/api/products", async (req, res) => {
 app.get("/api/products/featured", async (req, res) => {
   try {
     const { data, error } = await filterActiveProducts(supabase.from("products").select("*"))
+      .gt("stock", 0)
       .eq("featured", true)
       .order("created_at", { ascending: false }).limit(8);
     if (error) throw error;
@@ -256,6 +257,7 @@ app.get("/api/products/featured", async (req, res) => {
       const { data: fallback, error: fallbackErr } = await filterActiveProducts(
         supabase.from("products").select("*"),
       )
+        .gt("stock", 0)
         .order("created_at", { ascending: false }).limit(8);
       if (fallbackErr) throw fallbackErr;
       return res.json(fallback);
@@ -271,10 +273,10 @@ app.get("/api/products/home", async (req, res) => {
   try {
     const productsQuery = () => filterActiveProducts(
       supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
-    ).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(8);
+    ).gt("stock", 0).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(8);
     const featuredQuery = () => filterActiveProducts(
       supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
-    ).eq("featured", true).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(4);
+    ).gt("stock", 0).eq("featured", true).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(4);
 
     const [{ data: products, error: productsError }, { data: featured, error: featuredError }] =
       await Promise.all([productsQuery(), featuredQuery()]);
