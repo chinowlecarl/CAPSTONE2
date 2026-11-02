@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import CustomerName from "../../components/CustomerName";
 
 export default function EventDetails() {
   const { user } = useApp();
@@ -158,7 +160,9 @@ export default function EventDetails() {
                         <div style={{ width: 34, height: 34, borderRadius: "50%", background: "linear-gradient(135deg,#f9a8d4,#be185d)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 13, flexShrink: 0 }}>
                           {c.fullname?.charAt(0).toUpperCase()}
                         </div>
-                        <span style={{ fontWeight: 700, color: "#1a1a1a" }}>{c.fullname}</span>
+                        <span style={{ fontWeight: 700 }}>
+                          <CustomerName name={c.fullname} status={c.status} />
+                        </span>
                       </div>
                     </td>
                     <td style={{ padding: "10px 14px", color: "#666" }}>@{c.username}</td>

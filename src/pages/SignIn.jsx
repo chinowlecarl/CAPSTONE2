@@ -102,6 +102,24 @@ export default function SignIn({ setPage }) {
     }
   };
 
+  const handlePasswordReset = async () => {
+    if (!email.trim()) {
+      setError("Enter your email address first so we can send a reset link.");
+      return;
+    }
+    setResetSending(true);
+    setError("");
+    setNotice("");
+    try {
+      await requestPasswordReset(email);
+      setNotice("If an account exists for that email, a password reset link has been sent.");
+    } catch (err) {
+      setError(err.message || "Could not send a password reset link.");
+    } finally {
+      setResetSending(false);
+    }
+  };
+
   const handleCancel = async () => {
     await cancelChallenge();
     setChallenge(null);
