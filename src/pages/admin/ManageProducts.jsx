@@ -40,7 +40,7 @@ function optimizeProductImage(file) {
           reject(new Error("Could not optimize this image."));
           return;
         }
-        readFileAsDataURL(blob.type === "image/webp" ? blob : file).then(resolve, reject);
+        readFileAsDataURL(blob).then(resolve, reject);
       }, "image/webp", 0.82);
     };
     image.onerror = () => {

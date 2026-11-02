@@ -3,7 +3,7 @@ import { apiFetch } from "../utils/api";
 import { Card } from "../components/Card";
 
 const CATEGORIES = ["All", "Tops", "Bottoms", "Dresses", "Jackets", "Accessories"];
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 12;
 
 export default function Products() {
   const [products, setProducts] = useState([]);

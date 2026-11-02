@@ -203,9 +203,14 @@ app.put("/api/me", auth, async (req, res) => {
 // ============================================================
 
 const SOLD_PRODUCT_RETENTION_MS = 72 * 60 * 60 * 1000;
-const PUBLIC_PRODUCT_FIELDS = "id,title,description,price,discount,category,image_url,stock,featured,created_at";
+const PUBLIC_PRODUCT_FIELDS = "id,title,description,price,discount,category,stock,featured,created_at";
 const filterShowcaseProducts = (query) =>
   query.or("archived_at.is.null,auto_archived_after_sale.eq.true");
+const productImageUrl = (req, product) => ({
+  ...product,
+  image_url: `${req.protocol}://${req.get("host")}/api/products/${encodeURIComponent(product.id)}/image`,
+});
+const withProductImageUrls = (req, products) => products.map((product) => productImageUrl(req, product));
 const filterActiveProducts = (query, search = "") => {
   const cutoff = new Date(Date.now() - SOLD_PRODUCT_RETENTION_MS).toISOString();
   query = query.is("archived_at", null);
@@ -241,7 +246,7 @@ app.get("/api/products", async (req, res) => {
     if (isPaginated) q = q.range(offset, offset + limit - 1);
     const { data, error } = await q;
     if (error) throw error;
-    res.json(data);
+    res.json(withProductImageUrls(req, data));
   } catch (err) {
     console.error(`[PRODUCTS ERROR] ${err.message}`);
     res.status(500).json({ error: "Failed to fetch products" });
@@ -250,19 +255,19 @@ app.get("/api/products", async (req, res) => {
 
 app.get("/api/products/featured", async (req, res) => {
   try {
-    const { data, error } = await filterShowcaseProducts(supabase.from("products").select("*"))
+    const { data, error } = await filterShowcaseProducts(supabase.from("products").select(PUBLIC_PRODUCT_FIELDS))
       .eq("featured", true)
       .order("created_at", { ascending: false }).limit(8);
     if (error) throw error;
     if (!data || data.length === 0) {
       const { data: fallback, error: fallbackErr } = await filterShowcaseProducts(
-        supabase.from("products").select("*"),
+        supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
       )
         .order("created_at", { ascending: false }).limit(8);
       if (fallbackErr) throw fallbackErr;
-      return res.json(fallback);
+      return res.json(withProductImageUrls(req, fallback));
     }
-    res.json(data);
+    res.json(withProductImageUrls(req, data));
   } catch (err) {
     console.error(`[FEATURED ERROR] ${err.message}`);
     res.status(500).json({ error: "Failed to fetch featured products" });
@@ -292,7 +297,10 @@ app.get("/api/products/home", async (req, res) => {
     const arrivals = products || [];
     const featuredProducts = [...new Map([...(featured || []), ...(showcase || [])]
       .map((product) => [product.id, product])).values()].slice(0, 3);
-    const items = [...new Map([...arrivals, ...featuredProducts].map((product) => [product.id, product])).values()];
+    const items = withProductImageUrls(
+      req,
+      [...new Map([...arrivals, ...featuredProducts].map((product) => [product.id, product])).values()],
+    );
     res.json({
       items,
       arrivalIds: arrivals.map((product) => product.id),
@@ -304,12 +312,37 @@ app.get("/api/products/home", async (req, res) => {
   }
 });
 
+app.get("/api/products/:id/image", async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("products")
+      .select("image_url").eq("id", req.params.id).maybeSingle();
+    if (error) throw error;
+    const match = typeof data?.image_url === "string"
+      ? data.image_url.match(/^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/)
+      : null;
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
+    if (match) return res.type(match[1]).send(Buffer.from(match[2], "base64"));
+
+    if (typeof data?.image_url === "string") {
+      try {
+        if (new URL(data.image_url).protocol === "https:") return res.redirect(302, data.image_url);
+      } catch {
+        // Invalid product image URLs are treated as missing images.
+      }
+    }
+    return res.status(404).end();
+  } catch (err) {
+    console.error(`[PRODUCT IMAGE ERROR] ${err.message}`);
+    res.status(500).end();
+  }
+});
+
 app.get("/api/products/:id", async (req, res) => {
   try {
     const { data, error } = await filterActiveProducts(supabase.from("products").select("*"))
       .eq("id", req.params.id).single();
     if (error || !data) return res.status(404).json({ error: "Product not found" });
-    res.json(data);
+    res.json(productImageUrl(req, data));
   } catch (err) { res.status(500).json({ error: "Failed to fetch product" }); }
 });
 
@@ -447,12 +480,33 @@ app.delete("/api/cart", auth, async (req, res) => {
 app.get("/api/orders", auth, async (req, res) => {
   try {
     const { data, error } = await supabase.from("orders")
-      .select("*, order_items(*, products(*))")
+      .select("id,created_at,total_amount,status,shipping_address,lalamove_order_id,lalamove_status,lalamove_share_link,delivery_status")
       .eq("user_id", req.user.id)
       .order("created_at", { ascending: false });
     if (error) throw error;
     res.json(data);
   } catch (err) { res.status(500).json({ error: "Failed to fetch orders" }); }
+});
+
+app.get("/api/orders/:id/items", auth, async (req, res) => {
+  try {
+    const { data: order, error: orderError } = await supabase.from("orders")
+      .select("id").eq("id", req.params.id).eq("user_id", req.user.id).maybeSingle();
+    if (orderError) throw orderError;
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    const { data, error } = await supabase.from("order_items")
+      .select("id,quantity,unit_price,products(id,title,price,discount,image_url)")
+      .eq("order_id", order.id);
+    if (error) throw error;
+    res.json(data.map((item) => ({
+      ...item,
+      products: item.products ? productImageUrl(req, item.products) : item.products,
+    })));
+  } catch (err) {
+    console.error(`[ORDER ITEMS ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to fetch order items" });
+  }
 });
 
 app.post("/api/orders", auth, async (req, res) => {
