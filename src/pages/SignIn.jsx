@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 
 export default function SignIn({ setPage }) {
-  const { login, verifyTotpChallenge, verifyEmailOtpChallenge, cancelChallenge, requestPasswordReset } = useApp();
+  const { login, verifyTotpChallenge, verifyEmailOtpChallenge, resendEmailOtpChallenge, cancelChallenge, requestPasswordReset } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -15,6 +15,9 @@ export default function SignIn({ setPage }) {
   const [challenge, setChallenge] = useState(null); // { type: 'totp'|'email_otp', factorId?, email? }
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [resending, setResending] = useState(false);
+  const verifyingRef = useRef(false);
+  const resendingRef = useRef(false);
 
   const handleLogin = async () => {
     if (!email || !password) { setError("Please fill in all fields."); return; }
@@ -25,6 +28,7 @@ export default function SignIn({ setPage }) {
         setChallenge({ type: "totp", factorId: result.factorId });
       } else if (result.status === "email_otp_required") {
         setChallenge({ type: "email_otp", email: result.email });
+        setNotice("");
       } else {
         setPage("home"); // role-based redirect can't happen here since ctx.user updates async; App-level routing can bounce admins if needed
       }
@@ -35,11 +39,13 @@ export default function SignIn({ setPage }) {
   };
 
   const handleVerify = async () => {
+    if (!challenge || verifyingRef.current) return;
     const expectedLength = challenge.type === "totp" ? 6 : 8;
     if (code.length !== expectedLength) {
       setError(`Enter the ${expectedLength}-digit code from your ${challenge.type === "totp" ? "authenticator app" : "email"}.`);
       return;
     }
+    verifyingRef.current = true;
     setVerifying(true); setError("");
     try {
       if (challenge.type === "totp") {
@@ -49,9 +55,33 @@ export default function SignIn({ setPage }) {
       }
       setPage("home");
     } catch (err) {
-      setError(err.message);
+      setError(
+        challenge.type === "email_otp" && /token.*(expired|invalid)|(expired|invalid).*token/i.test(err.message)
+          ? "That code is invalid or expired. Request a new code, then use the latest email."
+          : err.message
+      );
+    } finally {
+      verifyingRef.current = false;
+      setVerifying(false);
     }
-    setVerifying(false);
+  };
+
+  const handleResendCode = async () => {
+    if (challenge?.type !== "email_otp" || resendingRef.current) return;
+    resendingRef.current = true;
+    setResending(true);
+    setError("");
+    setNotice("");
+    setCode("");
+    try {
+      await resendEmailOtpChallenge(challenge.email);
+      setNotice("A new 8-digit code was sent. Use the newest email.");
+    } catch (err) {
+      setError(err.message || "Could not send a new verification code.");
+    } finally {
+      resendingRef.current = false;
+      setResending(false);
+    }
   };
 
   const handlePasswordReset = async () => {
@@ -105,6 +135,11 @@ export default function SignIn({ setPage }) {
             ⚠ {error}
           </div>
         )}
+        {notice && (
+          <div role="status" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 14px", color: "#15803d", fontSize: 12, fontWeight: 600, marginBottom: 20 }}>
+            {notice}
+          </div>
+        )}
         <label htmlFor="verification-code" style={{ display: "block", color: "#888", fontSize: 10, fontWeight: 800, letterSpacing: 1.5, marginBottom: 6, textAlign: "center" }}>
           {challenge.type === "totp" ? "AUTHENTICATOR CODE · 6 DIGITS" : "EMAIL VERIFICATION CODE · 8 DIGITS"}
         </label>
@@ -123,12 +158,22 @@ export default function SignIn({ setPage }) {
 
         <button
           onClick={handleVerify}
-          disabled={verifying}
+          disabled={verifying || resending}
           style={{ width: "100%", background: "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 13, letterSpacing: 1.5, padding: "13px 0", cursor: "pointer", marginBottom: 12, opacity: verifying ? 0.7 : 1 }}
         >
           {verifying ? "VERIFYING..." : "VERIFY & CONTINUE"}
         </button>
-        <button onClick={handleCancel} style={{ width: "100%", background: "none", border: "none", color: "#aaa", fontSize: 12, cursor: "pointer" }}>
+        {challenge.type === "email_otp" && (
+          <button
+            type="button"
+            onClick={handleResendCode}
+            disabled={resending || verifying}
+            style={{ width: "100%", background: "none", border: "none", color: "#be185d", fontSize: 12, fontWeight: 700, cursor: resending || verifying ? "default" : "pointer", marginBottom: 12, opacity: resending ? 0.7 : 1 }}
+          >
+            {resending ? "SENDING NEW CODE..." : "Resend code"}
+          </button>
+        )}
+        <button onClick={handleCancel} disabled={verifying || resending} style={{ width: "100%", background: "none", border: "none", color: "#aaa", fontSize: 12, cursor: "pointer" }}>
           ← Back to login
         </button>
       </div>
