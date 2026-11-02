@@ -266,6 +266,14 @@ export function AppProvider({ children }) {
     toast(`Welcome back! 🌸`, "success");
   };
 
+  const resendEmailOtpChallenge = async (email) => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
+    if (error) throw new Error(error.message);
+  };
+
   const cancelChallenge = async () => {
     pendingChallengeRef.current = false;
     await supabase.auth.signOut();
@@ -410,7 +418,7 @@ export function AppProvider({ children }) {
     user, authLoading, cart, toasts, passwordRecoveryReady,
     login, logout, registerUser, completeLogin, completeRegister, updateProfile,
     requestPasswordReset, completePasswordReset,
-    verifyTotpChallenge, verifyEmailOtpChallenge, cancelChallenge,
+    verifyTotpChallenge, verifyEmailOtpChallenge, resendEmailOtpChallenge, cancelChallenge,
     addToCart, removeFromCart, updateQty, clearCart,
     toast,
   };
