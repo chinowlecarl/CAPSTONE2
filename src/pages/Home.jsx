@@ -9,8 +9,13 @@ export default function Home({ setPage }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([apiFetch("/products/featured"), apiFetch("/products")])
-      .then(([f, p]) => { setFeatured(f); setProducts(p); setLoading(false); })
+    apiFetch("/products/home")
+      .then(({ items, featuredIds, arrivalIds }) => {
+        const productsById = new Map(items.map((product) => [product.id, product]));
+        setFeatured(featuredIds.map((id) => productsById.get(id)).filter(Boolean));
+        setProducts(arrivalIds.map((id) => productsById.get(id)).filter(Boolean));
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 

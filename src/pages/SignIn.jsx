@@ -35,7 +35,7 @@ export default function SignIn({ setPage }) {
   };
 
   const handleVerify = async () => {
-    if (!code || code.length < 6) { setError("Enter the code from your email or authenticator app."); return; }
+    if (code.length !== 6) { setError("Enter the 6-digit code from your email or authenticator app."); return; }
     setVerifying(true); setError("");
     try {
       if (challenge.type === "totp") {
@@ -103,10 +103,10 @@ export default function SignIn({ setPage }) {
         )}
         <input
           value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
           onKeyDown={(e) => e.key === "Enter" && handleVerify()}
-          placeholder="Enter code"
-          maxLength={10}
+          placeholder="6-digit code"
+          maxLength={6}
           style={{ width: "100%", padding: "14px", border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 22, letterSpacing: 8, textAlign: "center", outline: "none", background: "#fff5f7", boxSizing: "border-box", marginBottom: 20, fontFamily: "monospace" }}
         />
 

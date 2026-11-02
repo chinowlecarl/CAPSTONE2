@@ -114,6 +114,7 @@ module.exports = function registerPaymentRoutes(
         })
         .eq("id", order.id)
         .eq("user_id", req.user.id)
+        .eq("status", "pending")
         .in("payment_status", ["PENDING", "REJECTED"])
         .select()
         .maybeSingle();
@@ -133,6 +134,25 @@ module.exports = function registerPaymentRoutes(
     } catch (err) {
       console.error(`[PAYMENT SUBMIT ERROR] ${err.message}`);
       res.status(500).json({ error: "Failed to submit payment proof" });
+    }
+  });
+
+  app.put("/api/orders/:id/payment/cancel", auth, async (req, res) => {
+    try {
+      const { data: cancelled, error } = await supabase.rpc("cancel_pending_payment", {
+        p_order_id: req.params.id,
+        p_user_id: req.user.id,
+      });
+      if (error) throw error;
+      if (!cancelled) {
+        return res.status(409).json({
+          error: "This payment is no longer pending and cannot be cancelled.",
+        });
+      }
+      res.json({ message: "Payment cancelled. The order remains in your history as cancelled." });
+    } catch (err) {
+      console.error(`[PAYMENT CANCEL ERROR] ${err.message}`);
+      res.status(500).json({ error: "Failed to cancel payment" });
     }
   });
 

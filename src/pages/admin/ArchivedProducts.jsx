@@ -77,7 +77,7 @@ export default function ArchivedProducts() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
         <div>
           <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 900, color: "#1a1a1a", margin: "0 0 4px" }}>Archive</h1>
-          <p style={{ color: "#aaa", fontSize: 13, margin: 0 }}>Products you removed. Restore them before the time runs out.</p>
+          <p style={{ color: "#aaa", fontSize: 13, margin: 0 }}>Removed products and items sold for over 3 days. Restore them before the time runs out.</p>
         </div>
         <button onClick={load} disabled={loading} style={{ background: "#fff", border: `1.5px solid ${LINE}`, borderRadius: 10, color: PINK, fontWeight: 700, fontSize: 12, padding: "9px 16px", cursor: "pointer", opacity: loading ? 0.6 : 1 }}>↻ Refresh</button>
       </div>
@@ -103,7 +103,7 @@ export default function ArchivedProducts() {
         <div style={{ textAlign: "center", padding: "56px 24px", background: "#fff", border: `1px solid ${LINE}`, borderRadius: 14, color: "#aaa" }}>
           <div style={{ fontSize: 34, marginBottom: 8 }}>🗄</div>
           <div style={{ fontWeight: 700, color: "#777" }}>Nothing in the archive</div>
-          <div style={{ fontSize: 13, marginTop: 4 }}>Products you remove will wait here for {days} days.</div>
+          <div style={{ fontSize: 13, marginTop: 4 }}>Removed products and items sold for 3 days will wait here for {days} days.</div>
         </div>
       ) : (
         <div style={{ background: "#fff", border: `1px solid ${LINE}`, borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 12px rgba(190,24,93,0.05)" }}>
@@ -122,6 +122,11 @@ export default function ArchivedProducts() {
                     <tr key={item.id} style={{ background: i % 2 ? "#fff5f7" : "#fff", borderTop: `1px solid ${LINE}` }}>
                       <td style={{ ...td, fontWeight: 700, color: "#1a1a1a" }}>
                         {item.title}
+                        {item.auto_archived_after_sale && item.sold_at && (
+                          <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", marginTop: 2 }}>
+                            Sold {phDate(item.sold_at)} at {phTime(item.sold_at)} (Asia/Manila)
+                          </div>
+                        )}
                         {item.inOrderHistory && <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", marginTop: 2 }}>In past orders</div>}
                       </td>
                       <td style={td}>{item.category}</td>
