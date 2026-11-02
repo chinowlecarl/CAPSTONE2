@@ -204,6 +204,8 @@ app.put("/api/me", auth, async (req, res) => {
 
 const SOLD_PRODUCT_RETENTION_MS = 72 * 60 * 60 * 1000;
 const PUBLIC_PRODUCT_FIELDS = "id,title,description,price,discount,category,image_url,stock,featured,created_at";
+const filterShowcaseProducts = (query) =>
+  query.or("archived_at.is.null,auto_archived_after_sale.eq.true");
 const filterActiveProducts = (query, search = "") => {
   const cutoff = new Date(Date.now() - SOLD_PRODUCT_RETENTION_MS).toISOString();
   query = query.is("archived_at", null);
@@ -248,12 +250,12 @@ app.get("/api/products", async (req, res) => {
 
 app.get("/api/products/featured", async (req, res) => {
   try {
-    const { data, error } = await filterActiveProducts(supabase.from("products").select("*"))
+    const { data, error } = await filterShowcaseProducts(supabase.from("products").select("*"))
       .eq("featured", true)
       .order("created_at", { ascending: false }).limit(8);
     if (error) throw error;
     if (!data || data.length === 0) {
-      const { data: fallback, error: fallbackErr } = await filterActiveProducts(
+      const { data: fallback, error: fallbackErr } = await filterShowcaseProducts(
         supabase.from("products").select("*"),
       )
         .order("created_at", { ascending: false }).limit(8);
@@ -272,26 +274,24 @@ app.get("/api/products/home", async (req, res) => {
     const productsQuery = () => filterActiveProducts(
       supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
     ).gt("stock", 0).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(8);
-    const featuredQuery = () => filterActiveProducts(
+    const featuredQuery = () => filterShowcaseProducts(
       supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
     ).eq("featured", true).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(4);
+    const showcaseQuery = () => filterShowcaseProducts(
+      supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
+    ).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(8);
 
-    const [{ data: products, error: productsError }, { data: featured, error: featuredError }] =
-      await Promise.all([productsQuery(), featuredQuery()]);
+    const [
+      { data: products, error: productsError },
+      { data: featured, error: featuredError },
+      { data: showcase, error: showcaseError },
+    ] = await Promise.all([productsQuery(), featuredQuery(), showcaseQuery()]);
     if (productsError) throw productsError;
     if (featuredError) throw featuredError;
+    if (showcaseError) throw showcaseError;
     const arrivals = products || [];
-    let featuredProducts = featured || [];
-    if (featuredProducts.length === 0) {
-      const { data: displayProducts, error: displayError } = await filterActiveProducts(
-        supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
-      )
-        .order("created_at", { ascending: false })
-        .order("id", { ascending: true })
-        .limit(4);
-      if (displayError) throw displayError;
-      featuredProducts = displayProducts || [];
-    }
+    const featuredProducts = [...new Map([...(featured || []), ...(showcase || [])]
+      .map((product) => [product.id, product])).values()].slice(0, 3);
     const items = [...new Map([...arrivals, ...featuredProducts].map((product) => [product.id, product])).values()];
     res.json({
       items,
