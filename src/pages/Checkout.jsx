@@ -6,7 +6,6 @@ const PAYMENT_METHODS = [
   { id: "cod",    label: "Cash on Delivery",  icon: "💵", desc: "Pay when your order arrives" },
   { id: "gcash",  label: "GCash",             icon: "📱", desc: "Pay via GCash mobile wallet" },
   { id: "maya",   label: "Maya",              icon: "💳", desc: "Pay via Maya (PayMaya)" },
-  { id: "card",   label: "Credit / Debit Card", icon: "🏦", desc: "Visa, Mastercard accepted" },
 ];
 
 // TODO: replace with the real business QR code images once provided
@@ -14,6 +13,45 @@ const QR_IMAGES = {
   gcash: "https://placehold.co/280x280/00A1E4/ffffff?text=GCash+QR",
   maya:  "https://placehold.co/280x280/5CC638/ffffff?text=Maya+QR",
 };
+
+const PENDING_KEY = "fitcheque_pending_proof";
+
+// Read the pending-payment session (so a page refresh doesn't lose the order)
+const readPending = () => {
+  try {
+    return JSON.parse(sessionStorage.getItem(PENDING_KEY) || "null");
+  } catch {
+    return null;
+  }
+};
+const savePending = (data) => {
+  try { sessionStorage.setItem(PENDING_KEY, JSON.stringify(data)); } catch {}
+};
+const clearPending = () => {
+  try { sessionStorage.removeItem(PENDING_KEY); } catch {}
+};
+
+// Resize + compress the screenshot so the request body stays small
+const compressImage = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const MAX = 1200;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.8));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
 
 export default function Checkout({ setPage }) {
   const { user, cart, toast, clearCart } = useApp();
@@ -31,10 +69,16 @@ export default function Checkout({ setPage }) {
   const tax      = subtotal * 0.12;
   const total    = subtotal + shipping + tax;
 
-  const [step, setStep]       = useState(1); // 1=details, 2=payment, 2.5=proof (gcash/maya only), 3=success
-  const [payment, setPayment] = useState("cod");
+  // Restore a pending GCash/Maya order if the page was refreshed
+  const [saved] = useState(readPending);
+
+  const [step, setStep]       = useState(saved ? 2.5 : 1); // 1=details, 2=payment, 2.5=proof (gcash/maya only), 3=success
+  const [payment, setPayment] = useState(saved?.payment || "cod");
   const [loading, setLoading] = useState(false);
-  const [orderId, setOrderId] = useState(null);
+  const [orderId, setOrderId] = useState(saved?.orderId || null);
+  const [orderTotal, setOrderTotal] = useState(saved?.orderTotal ?? null); // saved total, because cart is cleared after placing order
+  const [deliverTo, setDeliverTo]   = useState(saved?.deliverTo || "");
+  const [contactPhone, setContactPhone] = useState(saved?.phone || "");
   const [paymentSubmitted, setPaymentSubmitted] = useState(false);
   const [form, setForm]       = useState({
     username: user?.username || "",
@@ -90,16 +134,45 @@ export default function Checkout({ setPage }) {
 
       const addressPart = form.address ? `${form.address}, ` : "";
       const shipping_address = `${addressPart}${form.city} ${form.zip} — Phone: ${form.phone}`;
+      const deliveryText = [form.address, `${form.city} ${form.zip}`.trim()].filter(Boolean).join(", ");
+
       const data = await apiFetch("/orders", {
         method: "POST",
-        body: JSON.stringify({ shipping_address }),
+        body: JSON.stringify({
+          shipping_address,
+          payment_method: payment.toUpperCase(),
+          notes: form.notes,
+          fullname: form.fullname,
+          email: form.email,
+          phone: form.phone,
+        }),
       });
-      if (!data.order?.id) throw new Error("The order was created but no order ID was returned.");
-      setOrderId(data.order.id);
-      await clearCart();
+
+      const newOrderId = data.order?.id;
+      // Prefer the total calculated by the server, fall back to the client total
+      const finalTotal = Number(data.order?.total) || total;
+
+      setOrderId(newOrderId);
+      setOrderTotal(finalTotal);
+      setDeliverTo(deliveryText);
+      setContactPhone(form.phone);
+
+      // Clear the cart, but don't let a failure here look like a failed order
+      try {
+        await clearCart();
+      } catch (e) {
+        console.error("clearCart failed:", e);
+      }
 
       if (payment === "gcash" || payment === "maya") {
         // Order exists as PENDING payment — now show QR + collect proof
+        savePending({
+          orderId: newOrderId,
+          orderTotal: finalTotal,
+          payment,
+          deliverTo: deliveryText,
+          phone: form.phone,
+        });
         setStep(2.5);
         toast("Order created! Please complete your payment.", "success");
       } else {
@@ -114,7 +187,7 @@ export default function Checkout({ setPage }) {
     }
   };
 
-  const handleProofFile = (e) => {
+  const handleProofFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -125,12 +198,13 @@ export default function Checkout({ setPage }) {
       toast("Image must be under 8MB", "error");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setProofImage(reader.result);
-      setProofPreview(reader.result);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImage(file);
+      setProofImage(compressed);
+      setProofPreview(compressed);
+    } catch {
+      toast("Could not read that image. Please try another one.", "error");
+    }
   };
 
   const submitPaymentProof = async () => {
@@ -148,6 +222,7 @@ export default function Checkout({ setPage }) {
           proof_base64: proofImage,
         }),
       });
+      clearPending();
       setPaymentSubmitted(true);
       setStep(3);
       toast("Payment proof submitted! Waiting for admin verification.", "success");
@@ -223,7 +298,7 @@ export default function Checkout({ setPage }) {
         {orderId && (
           <div style={{ background: "#fff5f7", borderRadius: 10, padding: "8px 14px", marginBottom: 20, textAlign: "center", border: "1px solid #fce7f3" }}>
             <span style={{ fontSize: 10, color: "#aaa", fontWeight: 800, letterSpacing: 1 }}>ORDER ID: </span>
-            <span style={{ fontFamily: "monospace", color: "#be185d", fontWeight: 700, fontSize: 12 }}>#{orderId.slice(0,8).toUpperCase()}</span>
+            <span style={{ fontFamily: "monospace", color: "#be185d", fontWeight: 700, fontSize: 12 }}>#{String(orderId).slice(0,8).toUpperCase()}</span>
           </div>
         )}
 
@@ -233,7 +308,7 @@ export default function Checkout({ setPage }) {
 
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <p style={{ fontSize: 12, color: "#888", margin: "0 0 4px" }}>Amount to pay</p>
-          <p style={{ fontSize: 26, fontWeight: 900, color: "#be185d", margin: 0 }}>{fmt(total)}</p>
+          <p style={{ fontSize: 26, fontWeight: 900, color: "#be185d", margin: 0 }}>{fmt(orderTotal ?? total)}</p>
         </div>
 
         <div style={{ marginBottom: 16 }}>
@@ -301,20 +376,20 @@ export default function Checkout({ setPage }) {
         {orderId && (
           <div style={{ background: "#fff5f7", borderRadius: 12, padding: "12px 20px", marginBottom: 24, border: "1px solid #fce7f3" }}>
             <p style={{ color: "#aaa", fontSize: 10, fontWeight: 800, letterSpacing: 1.5, margin: "0 0 4px" }}>ORDER ID</p>
-            <p style={{ fontFamily: "monospace", color: "#be185d", fontWeight: 700, fontSize: 13, margin: 0 }}>#{orderId.slice(0,8).toUpperCase()}</p>
+            <p style={{ fontFamily: "monospace", color: "#be185d", fontWeight: 700, fontSize: 13, margin: 0 }}>#{String(orderId).slice(0,8).toUpperCase()}</p>
           </div>
         )}
         <div style={{ background: "#fff5f7", borderRadius: 12, padding: "16px 20px", marginBottom: 28, border: "1px solid #fce7f3", textAlign: "left" }}>
           <p style={{ color: "#aaa", fontSize: 10, fontWeight: 800, letterSpacing: 1.5, margin: "0 0 10px" }}>ORDER DETAILS</p>
           {[
             ["Payment", PAYMENT_METHODS.find(p => p.id === payment)?.label],
-            ["Deliver to", `${form.address}, ${form.city}`],
-            ["Contact", form.phone],
-            ["Total", fmt(total)],
+            ["Deliver to", deliverTo || "—"],
+            ["Contact", contactPhone || "—"],
+            ["Total", fmt(orderTotal ?? total)],
           ].map(([label, val]) => (
-            <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
+            <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8, fontSize: 13 }}>
               <span style={{ color: "#888" }}>{label}</span>
-              <span style={{ fontWeight: 700, color: "#1a1a1a" }}>{val}</span>
+              <span style={{ fontWeight: 700, color: "#1a1a1a", textAlign: "right" }}>{val}</span>
             </div>
           ))}
         </div>
@@ -405,7 +480,10 @@ export default function Checkout({ setPage }) {
                   ← BACK TO CART
                 </button>
                 <button
-                  onClick={() => { if (validateStep1()) setStep(2); else alert("Please fill in all required fields. Your phone must be a Philippine mobile number like 09XXXXXXXXX."); }}
+                  onClick={() => {
+                    if (validateStep1()) setStep(2);
+                    else toast("Please fill in all required fields. Phone must be a PH mobile number like 09XXXXXXXXX.", "error");
+                  }}
                   style={{ flex: 2, background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 12, color: "#fff", fontWeight: 800, fontSize: 14, letterSpacing: 1, padding: "14px 0", cursor: "pointer" }}
                 >
                   CONTINUE TO PAYMENT →
@@ -444,7 +522,10 @@ export default function Checkout({ setPage }) {
               {/* Card form */}
               {payment === "card" && (
                 <div style={{ background: "#fff5f7", borderRadius: 12, padding: 20, border: "1px solid #fce7f3", marginBottom: 20 }}>
-                  <p style={{ fontSize: 10, fontWeight: 800, color: "#be185d", letterSpacing: 1.5, margin: "0 0 16px" }}>CARD DETAILS</p>
+                  <p style={{ fontSize: 10, fontWeight: 800, color: "#be185d", letterSpacing: 1.5, margin: "0 0 8px" }}>CARD DETAILS</p>
+                  <p style={{ fontSize: 11, color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "6px 10px", margin: "0 0 16px" }}>
+                    ⚠️ Demo only — card details are NOT processed or saved. Please do not enter a real card number.
+                  </p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <div>
                       <label style={labelStyle}>Card Number</label>
