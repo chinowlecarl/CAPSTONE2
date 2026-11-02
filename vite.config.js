@@ -14,8 +14,8 @@ export default defineConfig({
         "worker-src 'self' blob:",                        // ✅ fixes blob worker error
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
-        "img-src 'self' data: blob: http://localhost:5000 https://images.unsplash.com https://placehold.co https://via.placeholder.com",
-        "connect-src 'self' http://localhost:5000 https://*.supabase.co ws://localhost:*",
+        "img-src 'self' data: blob: http://localhost:5000 https://*.tile.openstreetmap.org https://images.unsplash.com https://placehold.co https://via.placeholder.com",
+        "connect-src 'self' http://localhost:5000 https://*.supabase.co https://nominatim.openstreetmap.org ws://localhost:*",
         "frame-src 'none'",
         "frame-ancestors 'none'",
         "form-action 'self'",

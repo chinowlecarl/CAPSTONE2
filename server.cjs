@@ -20,8 +20,8 @@ app.use(helmet({
       defaultSrc:  ["'self'"],
       scriptSrc:   ["'self'"],
       styleSrc:    ["'self'", "'unsafe-inline'"],
-      imgSrc:      ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://placehold.co", "https://*.supabase.co"],
-      connectSrc:  ["'self'", "https://*.supabase.co"],
+      imgSrc:      ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://placehold.co", "https://*.supabase.co", "https://*.tile.openstreetmap.org"],
+      connectSrc:  ["'self'", "https://*.supabase.co", "https://nominatim.openstreetmap.org"],
       fontSrc:     ["'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
       objectSrc:   ["'none'"],
       frameSrc:    ["'none'"],
@@ -511,7 +511,20 @@ app.get("/api/orders/:id/items", auth, async (req, res) => {
 });
 
 app.post("/api/orders", auth, async (req, res) => {
-  const { shipping_address } = req.body;
+  const { shipping_address, delivery_lat, delivery_lng } = req.body;
+  const hasLatitude = delivery_lat !== undefined && delivery_lat !== null && delivery_lat !== "";
+  const hasLongitude = delivery_lng !== undefined && delivery_lng !== null && delivery_lng !== "";
+  if (hasLatitude !== hasLongitude) {
+    return res.status(400).json({ error: "Both delivery coordinates are required" });
+  }
+  const latitude = hasLatitude ? Number(delivery_lat) : null;
+  const longitude = hasLongitude ? Number(delivery_lng) : null;
+  if (hasLatitude && (
+    !Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+    !Number.isFinite(longitude) || longitude < -180 || longitude > 180
+  )) {
+    return res.status(400).json({ error: "Invalid delivery coordinates" });
+  }
   try {
     const { data: cart } = await supabase.from("cart_items")
       .select("*, products(*)").eq("user_id", req.user.id);
@@ -528,6 +541,8 @@ app.post("/api/orders", auth, async (req, res) => {
         user_id: req.user.id,
         total_amount: Math.round(total * 100) / 100,
         shipping_address: sanitize(shipping_address) || "",
+        delivery_lat: latitude,
+        delivery_lng: longitude,
         status: "pending"
       }]).select().single();
     if (oErr) throw oErr;

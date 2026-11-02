@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
     .eq("payment_status", "PAID")
     .is("lalamove_order_id", null)
     .in("delivery_status", ["NOT_BOOKED", "FAILED"])
-    .select("id, user_id, shipping_address")
+    .select("id, user_id, shipping_address, delivery_lat, delivery_lng")
     .maybeSingle();
 
   if (claimErr) {
@@ -240,7 +240,9 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const recipientName = customer?.fullname || "Customer";
 
-    const geo = await geocode(address);
+    const geo = order.delivery_lat != null && order.delivery_lng != null
+      ? { lat: String(order.delivery_lat), lng: String(order.delivery_lng) }
+      : await geocode(address);
     const dropoffStop = geo ? { coordinates: geo, address } : { address }; // let Lalamove try to resolve it; it returns a clear 422 if it can't
 
     const quotation = await lalamoveRequest(cfg, "POST", "/v3/quotations", {

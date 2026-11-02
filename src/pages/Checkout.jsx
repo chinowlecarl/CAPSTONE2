@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { fmt, salePrice, apiFetch } from "../utils/api";
+import DeliveryLocationPicker from "../components/DeliveryLocationPicker";
 
 const PAYMENT_METHODS = [
   { id: "cod",    label: "Cash on Delivery",  icon: "💵", desc: "Pay when your order arrives" },
@@ -47,6 +48,7 @@ export default function Checkout({ setPage }) {
     notes:    "",
   });
   const [cardForm, setCardForm] = useState({ number: "", name: "", expiry: "", cvv: "" });
+  const [deliveryLocation, setDeliveryLocation] = useState(null);
 
   // Payment proof state
   const [proofRef, setProofRef]         = useState("");
@@ -74,8 +76,20 @@ export default function Checkout({ setPage }) {
   };
 
   const validateStep1 = () => {
-    if (!form.fullname || !form.email || !form.phone || !form.city) return false;
+    if (!form.fullname || !form.email || !form.phone || !form.city || !deliveryLocation) return false;
     return /^(09|\+639|639)\d{9}$/.test(form.phone.replace(/[\s-]/g, ""));
+  };
+
+  const handleLocationSelect = (location) => {
+    setDeliveryLocation({ lat: location.lat, lng: location.lng });
+    if (location.address) {
+      setForm((current) => ({
+        ...current,
+        address: location.address.street || current.address,
+        city: location.address.city || current.city,
+        zip: location.address.zip || current.zip,
+      }));
+    }
   };
 
   const placeOrder = async () => {
@@ -88,11 +102,16 @@ export default function Checkout({ setPage }) {
         return;
       }
 
+      if (!deliveryLocation) throw new Error("Pin the exact delivery location on the map first.");
       const addressPart = form.address ? `${form.address}, ` : "";
       const shipping_address = `${addressPart}${form.city} ${form.zip} — Phone: ${form.phone}`;
       const data = await apiFetch("/orders", {
         method: "POST",
-        body: JSON.stringify({ shipping_address }),
+        body: JSON.stringify({
+          shipping_address,
+          delivery_lat: deliveryLocation.lat,
+          delivery_lng: deliveryLocation.lng,
+        }),
       });
       if (!data.order?.id) throw new Error("The order was created but no order ID was returned.");
       setOrderId(data.order.id);
@@ -376,7 +395,11 @@ export default function Checkout({ setPage }) {
                     style={inputStyle} onFocus={(e)=>(e.target.style.borderColor="#db2777")} onBlur={(e)=>(e.target.style.borderColor="#fce7f3")} />
                 </div>
                 <div style={{ gridColumn: "1/-1" }}>
-                  <label style={labelStyle}>Street Address (optional)</label>
+                  <label style={labelStyle}>Pin your exact delivery location *</label>
+                  <DeliveryLocationPicker location={deliveryLocation} onSelect={handleLocationSelect} />
+                </div>
+                <div style={{ gridColumn: "1/-1" }}>
+                  <label style={labelStyle}>Street / Barangay / Landmark</label>
                   <input value={form.address} onChange={sf("address")} placeholder="123 Rizal St, Barangay..."
                     style={inputStyle} onFocus={(e)=>(e.target.style.borderColor="#db2777")} onBlur={(e)=>(e.target.style.borderColor="#fce7f3")} />
                 </div>
@@ -405,7 +428,7 @@ export default function Checkout({ setPage }) {
                   ← BACK TO CART
                 </button>
                 <button
-                  onClick={() => { if (validateStep1()) setStep(2); else alert("Please fill in all required fields. Your phone must be a Philippine mobile number like 09XXXXXXXXX."); }}
+                  onClick={() => { if (validateStep1()) setStep(2); else alert("Please fill in all required fields, pin the exact delivery location, and use a Philippine mobile number like 09XXXXXXXXX."); }}
                   style={{ flex: 2, background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 12, color: "#fff", fontWeight: 800, fontSize: 14, letterSpacing: 1, padding: "14px 0", cursor: "pointer" }}
                 >
                   CONTINUE TO PAYMENT →
