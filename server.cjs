@@ -249,7 +249,6 @@ app.get("/api/products", async (req, res) => {
 app.get("/api/products/featured", async (req, res) => {
   try {
     const { data, error } = await filterActiveProducts(supabase.from("products").select("*"))
-      .gt("stock", 0)
       .eq("featured", true)
       .order("created_at", { ascending: false }).limit(8);
     if (error) throw error;
@@ -257,7 +256,6 @@ app.get("/api/products/featured", async (req, res) => {
       const { data: fallback, error: fallbackErr } = await filterActiveProducts(
         supabase.from("products").select("*"),
       )
-        .gt("stock", 0)
         .order("created_at", { ascending: false }).limit(8);
       if (fallbackErr) throw fallbackErr;
       return res.json(fallback);
@@ -276,14 +274,24 @@ app.get("/api/products/home", async (req, res) => {
     ).gt("stock", 0).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(8);
     const featuredQuery = () => filterActiveProducts(
       supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
-    ).gt("stock", 0).eq("featured", true).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(4);
+    ).eq("featured", true).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(4);
 
     const [{ data: products, error: productsError }, { data: featured, error: featuredError }] =
       await Promise.all([productsQuery(), featuredQuery()]);
     if (productsError) throw productsError;
     if (featuredError) throw featuredError;
     const arrivals = products || [];
-    const featuredProducts = featured?.length ? featured : arrivals.slice(0, 4);
+    let featuredProducts = featured || [];
+    if (featuredProducts.length === 0) {
+      const { data: displayProducts, error: displayError } = await filterActiveProducts(
+        supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
+      )
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .limit(4);
+      if (displayError) throw displayError;
+      featuredProducts = displayProducts || [];
+    }
     const items = [...new Map([...arrivals, ...featuredProducts].map((product) => [product.id, product])).values()];
     res.json({
       items,
