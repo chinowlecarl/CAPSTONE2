@@ -2,16 +2,13 @@ import { fmt, salePrice } from "../utils/api";
 
 export function Hero({ featured, setPage }) {
   return (
-    <section style={{
+    <section className="home-hero" style={{
       background: "linear-gradient(135deg, #fff0f6 0%, #fce7f3 50%, #fbcfe8 100%)",
       padding: "40px 24px 32px",
     }}>
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         {featured.length > 0 ? (
-          <div style={{
-            display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 4, borderRadius: 12, overflow: "hidden", height: 280,
-          }}>
+          <div className="home-featured-grid">
             {featured.slice(0, 4).map((p, index) => (
               <div key={p.id} style={{ position: "relative", overflow: "hidden" }}>
                 <img
@@ -39,16 +36,8 @@ export function Hero({ featured, setPage }) {
             ))}
           </div>
         ) : (
-          <div style={{
-            height: 280,
-            background: "linear-gradient(135deg, #fce7f3, #f9a8d4)",
-            borderRadius: 12,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <div style={{
-              fontFamily: "'Playfair Display', serif", fontSize: 48,
-              fontWeight: 900, color: "#be185d", letterSpacing: 4,
-            }}>
+          <div className="home-hero-empty">
+            <div className="home-hero-title">
               FITCHEQUE
             </div>
           </div>

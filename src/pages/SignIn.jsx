@@ -35,7 +35,11 @@ export default function SignIn({ setPage }) {
   };
 
   const handleVerify = async () => {
-    if (code.length !== 6) { setError("Enter the 6-digit code from your email or authenticator app."); return; }
+    const expectedLength = challenge.type === "totp" ? 6 : 8;
+    if (code.length !== expectedLength) {
+      setError(`Enter the ${expectedLength}-digit code from your ${challenge.type === "totp" ? "authenticator app" : "email"}.`);
+      return;
+    }
     setVerifying(true); setError("");
     try {
       if (challenge.type === "totp") {
@@ -92,7 +96,7 @@ export default function SignIn({ setPage }) {
           <p style={{ color: "#aaa", fontSize: 12 }}>
             {challenge.type === "totp"
               ? "Enter the 6-digit code from your authenticator app"
-              : `We sent a 6-digit code to ${challenge.email}`}
+              : `We sent an 8-digit code to ${challenge.email}`}
           </p>
         </div>
 
@@ -101,13 +105,20 @@ export default function SignIn({ setPage }) {
             ⚠ {error}
           </div>
         )}
+        <label htmlFor="verification-code" style={{ display: "block", color: "#888", fontSize: 10, fontWeight: 800, letterSpacing: 1.5, marginBottom: 6, textAlign: "center" }}>
+          {challenge.type === "totp" ? "AUTHENTICATOR CODE · 6 DIGITS" : "EMAIL VERIFICATION CODE · 8 DIGITS"}
+        </label>
         <input
+          id="verification-code"
           value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, challenge.type === "totp" ? 6 : 8))}
           onKeyDown={(e) => e.key === "Enter" && handleVerify()}
-          placeholder="6-digit code"
-          maxLength={6}
-          style={{ width: "100%", padding: "14px", border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 22, letterSpacing: 8, textAlign: "center", outline: "none", background: "#fff5f7", boxSizing: "border-box", marginBottom: 20, fontFamily: "monospace" }}
+          placeholder={`${challenge.type === "totp" ? 6 : 8}-digit code`}
+          maxLength={challenge.type === "totp" ? 6 : 8}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          aria-label={challenge.type === "totp" ? "6-digit authenticator code" : "8-digit email verification code"}
+          style={{ width: "100%", padding: "14px", border: "1.5px solid #fce7f3", borderRadius: 10, fontSize: 22, letterSpacing: challenge.type === "totp" ? 8 : 5, textAlign: "center", outline: "none", background: "#fff5f7", boxSizing: "border-box", marginBottom: 20, fontFamily: "monospace" }}
         />
 
         <button

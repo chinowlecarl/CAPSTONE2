@@ -2,7 +2,7 @@ export function Footer({ setPage }) {
   return (
     <footer style={{ background: "#1a1a1a", color: "#fff", padding: "48px 0 24px" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
-        <div style={{
+        <div className="footer-grid" style={{
           display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr",
           gap: 32, marginBottom: 40,
         }}>
