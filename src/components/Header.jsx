@@ -6,6 +6,10 @@ export function Header({ page, setPage }) {
   const { user, cart } = useApp();
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
   const [open, setOpen] = useState(false);
+  const goToPage = (nextPage) => {
+    setPage(nextPage);
+    setOpen(false);
+  };
 
   const links = [
     { label: "NEW ARRIVALS", to: "home" },
@@ -20,14 +24,15 @@ export function Header({ page, setPage }) {
       borderBottom: "2px solid #fce7f3",
       position: "sticky", top: 0, zIndex: 100,
       boxShadow: "0 2px 12px rgba(190,24,93,0.08)",
-    }}>
-      <div style={{
+    }} className="store-header">
+      <div className="store-header-inner" style={{
         maxWidth: 1200, margin: "0 auto", padding: "0 24px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         height: 60,
       }}>
         <button
-          onClick={() => setPage("home")}
+          className="store-header-brand"
+          onClick={() => goToPage("home")}
           style={{
             fontFamily: "'Playfair Display', serif", fontSize: 22,
             fontWeight: 900, color: "#1a1a1a", letterSpacing: 2,
@@ -37,13 +42,24 @@ export function Header({ page, setPage }) {
           FITCHEQUE
         </button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <button
+          className="store-header-menu-toggle"
+          type="button"
+          aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+          aria-expanded={open}
+          aria-controls="store-header-actions"
+          onClick={() => setOpen((isOpen) => !isOpen)}
+        >
+          {open ? "✕" : "☰"}
+        </button>
+
+        <div id="store-header-actions" className={`store-header-actions${open ? " is-open" : ""}`}>
           {links.map((l) => (
             <HeaderNavLink
               key={l.label}
               label={l.label}
               active={page === l.to}
-              onClick={() => setPage(l.to)}
+              onClick={() => goToPage(l.to)}
             />
           ))}
 
@@ -53,11 +69,12 @@ export function Header({ page, setPage }) {
                 <HeaderNavLink
                   label="ADMIN"
                   active={page === "admin"}
-                  onClick={() => setPage("admin")}
+                  onClick={() => goToPage("admin")}
                 />
               )}
               <button
-                onClick={() => setPage("profile")}
+                aria-label="Open profile"
+                onClick={() => goToPage("profile")}
                 style={{ background: "none", border: "none", cursor: "pointer", marginLeft: 8 }}
               >
                 <div style={{
@@ -73,7 +90,7 @@ export function Header({ page, setPage }) {
             </>
           ) : (
             <button
-              onClick={() => setPage("login")}
+              onClick={() => goToPage("login")}
               style={{
                 marginLeft: 8,
                 background: "linear-gradient(135deg, #f9a8d4, #be185d)",
@@ -87,7 +104,8 @@ export function Header({ page, setPage }) {
           )}
 
           <button
-            onClick={() => setPage("cart")}
+            aria-label={`Open cart${cartCount > 0 ? `, ${cartCount} items` : ""}`}
+            onClick={() => goToPage("cart")}
             style={{ position: "relative", background: "none", border: "none", cursor: "pointer", marginLeft: 4 }}
           >
             <span style={{ fontSize: 20 }}>🛍</span>

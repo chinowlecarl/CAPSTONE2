@@ -86,7 +86,7 @@ module.exports = function registerArchive(app, { supabase, auth, adminOnly }) {
 
       const { data, error } = await supabase
         .from("products")
-        .select("id,title,category,price,stock,archived_at,archived_by")
+        .select("id,title,category,price,stock,archived_at,archived_by,sold_at,auto_archived_after_sale")
         .not("archived_at", "is", null)
         .order("archived_at", { ascending: false });
       if (error) throw error;
@@ -125,14 +125,19 @@ module.exports = function registerArchive(app, { supabase, auth, adminOnly }) {
   app.post("/api/admin/products/:id/restore", auth, adminOnly, async (req, res) => {
     if (!UUID.test(req.params.id)) return res.status(404).json({ error: "Product not found" });
     try {
-      const { data: product, error: findErr } = await supabase.from("products").select("id,title,archived_at").eq("id", req.params.id).maybeSingle();
+      const { data: product, error: findErr } = await supabase.from("products").select("id,title,archived_at,auto_archived_after_sale").eq("id", req.params.id).maybeSingle();
       if (findErr) throw findErr;
       if (!product) return res.status(404).json({ error: "Product not found" });
       if (!product.archived_at) return res.status(409).json({ error: "This product is not archived" });
       if (windowInfo(product.archived_at).expired)
         return res.status(410).json({ error: `The ${RETENTION_DAYS}-day restore window for this product has ended` });
 
-      const { error } = await supabase.from("products").update({ archived_at: null, archived_by: null }).eq("id", product.id);
+      const changes = { archived_at: null, archived_by: null };
+      if (product.auto_archived_after_sale) {
+        changes.sold_at = null;
+        changes.auto_archived_after_sale = false;
+      }
+      const { error } = await supabase.from("products").update(changes).eq("id", product.id);
       if (error) throw error;
       res.json({ message: "Product restored", product: { id: product.id, title: product.title } });
     } catch (err) {

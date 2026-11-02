@@ -1,29 +1,29 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useApp } from "../../context/AppContext";
-import ManageProducts from "./ManageProducts";
-import ManageEvents   from "./ManageEvents";
-import PaymentVerification from "./PaymentVerification";
-import CheckInDesk    from "./CheckInDesk";
-import CreateEvent    from "./CreateEvent";
-import EventDetails   from "./EventDetails";
-import SalesInsights from "./SalesInsights";
-import CustomerBehavior from "./CustomerBehavior";
-import ActivityLog from "./ActivityLog";
-import ArchivedProducts from "./ArchivedProducts";
+
+const ManageProducts = lazy(() => import("./ManageProducts"));
+const ManageEvents = lazy(() => import("./ManageEvents"));
+const PaymentVerification = lazy(() => import("./PaymentVerification"));
+const CheckInDesk = lazy(() => import("./CheckInDesk"));
+const CreateEvent = lazy(() => import("./CreateEvent"));
+const EventDetails = lazy(() => import("./EventDetails"));
+const SalesInsights = lazy(() => import("./SalesInsights"));
+const CustomerBehavior = lazy(() => import("./CustomerBehavior"));
+const ActivityLog = lazy(() => import("./ActivityLog"));
+const ArchivedProducts = lazy(() => import("./ArchivedProducts"));
 
 const TABS = [
   { id: "products", label: "📦 Products",     icon: "📦" },
   { id: "archive",  label: "🗃 Archived",      icon: "🗃" },
   { id: "add",      label: "➕ Add Product",  icon: "➕" },
-  { id: "insights", label: "📈 Insights", icon: "📈" }, 
+  { id: "insights", label: "📈 Insights", icon: "📈" },
   { id: "behavior", label: "👥 Customer Behavior", icon: "👥" },
   { id: "payments", label: "💳 Payments",      icon: "💳" },
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
-  { id: "activity", label: "🕒 Activity Log",  icon: "🕒" },
-  { id: "checkin",  label: "🔍 Check-In",     icon: "🔍" },
+  { id: "activity", label: "🕐 Activity Log",  icon: "🕐" },
+  { id: "checkin",  label: "🔍 User Transaction", icon: "🔍" },
 ];
-
 export default function AdminHome({ setPage }) {
   const { user, logout } = useApp();
   const [tab, setTab] = useState("products");
@@ -68,16 +68,18 @@ export default function AdminHome({ setPage }) {
 
       {/* Tab content */}
       <div>
-        {tab === "products" && <ManageProducts setPage={setPage} />}
-        {tab === "archive"  && <ArchivedProducts />}
-        {tab === "add"      && <CreateEvent    setPage={setPage} />}
-        {tab === "orders"   && <ManageEvents   setPage={setPage} />}
-        {tab === "users"    && <EventDetails   setPage={setPage} />}
-        {tab === "checkin"  && <CheckInDesk    setPage={setPage} />}
-        {tab === "insights" && <SalesInsights  setPage={setPage} />}
-        {tab === "behavior" && <CustomerBehavior />}
-        {tab === "payments" && <PaymentVerification />}
-        {tab === "activity" && <ActivityLog />}
+        <Suspense fallback={<div role="status" style={{ padding: 48, textAlign: "center", color: "#be185d" }}>Loading admin screen...</div>}>
+          {tab === "products" && <ManageProducts setPage={setPage} />}
+          {tab === "archive"  && <ArchivedProducts />}
+          {tab === "add"      && <CreateEvent    setPage={setPage} />}
+          {tab === "orders"   && <ManageEvents   setPage={setPage} />}
+          {tab === "users"    && <EventDetails   setPage={setPage} />}
+          {tab === "checkin"  && <CheckInDesk    setPage={setPage} />}
+          {tab === "insights" && <SalesInsights  setPage={setPage} />}
+          {tab === "behavior" && <CustomerBehavior />}
+          {tab === "payments" && <PaymentVerification />}
+          {tab === "activity" && <ActivityLog />}
+        </Suspense>
       </div>
     </div>
   );

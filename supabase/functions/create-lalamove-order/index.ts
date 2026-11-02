@@ -293,6 +293,8 @@ Deno.serve(async (req) => {
         .update({
           lalamove_order_id: lalamoveOrderId,
           delivery_status: "BOOKED",
+          lalamove_status: placed?.data?.status ?? null,
+          lalamove_share_link: placed?.data?.shareLink ?? null,
         })
         .eq("id", orderId)
         .eq("delivery_status", "BOOKING");

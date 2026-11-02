@@ -6,12 +6,22 @@ import { createContext, useContext, useState, useEffect, useRef } from "react";
 export const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
 
+const isPasswordResetLocation = () => {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  return query.get("page") === "reset-password" ||
+    hash.get("type") === "recovery" ||
+    hash.has("error_code");
+};
+
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [passwordRecoveryReady, setPasswordRecoveryReady] = useState(false);
   const [cart, setCart] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const initialHashParams = new URLSearchParams(window.location.hash.slice(1));
+  const recoveryCallbackRef = useRef(initialHashParams.get("type") === "recovery");
 
   const toast = (msg, type = "info") => {
     const id = Date.now();
@@ -19,70 +29,108 @@ export function AppProvider({ children }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   };
 
-  // Build our app's "user" shape from a Supabase session + profiles row
-   const pendingChallengeRef = useRef(false); // suppresses auto user-load during MFA/OTP step
+  const pendingChallengeRef = useRef(false);
+  const unauthorizedRef = useRef(false);
 
 
   const loadProfileForSession = async (session) => {
     if (!session?.user) {
       setUser(null);
-      return;
+      return false;
     }
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("id, fullname, username, phone, address, role, status")
-      .eq("id", session.user.id)
-      .single();
 
-    if (error || !profile) {
-      console.error("Failed to load profile:", error?.message);
+    try {
+      const profile = await apiFetch("/me");
+      if (profile.id !== session.user.id) {
+        throw new Error("The authenticated account did not match the loaded profile.");
+      }
+      if (profile.role === "admin") {
+        await apiFetch("/admin/session");
+      }
+
+      unauthorizedRef.current = false;
+      setUser({ ...profile, email: session.user.email });
+      return true;
+    } catch (error) {
+      console.error("Failed to validate the authenticated session:", error.message);
       setUser(null);
-      return;
+      if ([401, 403, 404].includes(error.status)) {
+        try {
+          const { error: signOutError } = await supabase.auth.signOut();
+          if (signOutError) {
+            console.error("Failed to sign out after session validation failed:", signOutError.message);
+          }
+        } catch (signOutError) {
+          console.error("Failed to sign out after session validation failed:", signOutError.message);
+        }
+      }
+      return false;
     }
-
-    setUser({
-      id: profile.id,
-      fullname: profile.fullname,
-      username: profile.username,
-      email: session.user.email,
-      phone: profile.phone,
-      address: profile.address,
-      role: profile.role,
-      status: profile.status,
-    });
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const recoveryLink = new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery";
-      if (recoveryLink && session) {
-        setPasswordRecoveryReady(true);
+    let active = true;
+
+    const initializeSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (recoveryCallbackRef.current && session) {
+          setPasswordRecoveryReady(true);
+        }
+        if (isPasswordResetLocation()) {
+          setUser(null);
+          return;
+        }
+        if (!pendingChallengeRef.current) {
+          await loadProfileForSession(session);
+        }
+      } catch (error) {
+        console.error("Failed to initialize the authentication session:", error.message);
         setUser(null);
-        setAuthLoading(false);
-        return;
+      } finally {
+        if (active) setAuthLoading(false);
       }
-      if (!pendingChallengeRef.current) {
-        loadProfileForSession(session).finally(() => setAuthLoading(false));
-      } else {
-        setAuthLoading(false);
-      }
-    });
+    };
+
+    initializeSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY") {
-        setPasswordRecoveryReady(true);
-        setUser(null);
-        return;
-      }
-      if (pendingChallengeRef.current) return; // ignore session changes mid-challenge
-      loadProfileForSession(session);
-      if (event === "SIGNED_OUT") {
-        setCart([]);
-        setPasswordRecoveryReady(false);
-      }
+      queueMicrotask(() => {
+        if (!active) return;
+        if (event === "PASSWORD_RECOVERY") {
+          recoveryCallbackRef.current = true;
+          setPasswordRecoveryReady(true);
+          setUser(null);
+          return;
+        }
+        if (event === "SIGNED_OUT") {
+          setUser(null);
+          setCart([]);
+          setPasswordRecoveryReady(false);
+        }
+        if (pendingChallengeRef.current) return;
+        if (isPasswordResetLocation()) setUser(null);
+        else loadProfileForSession(session);
+      });
     });
 
-    return () => listener.subscription.unsubscribe();
+    const handleUnauthorized = () => {
+      if (unauthorizedRef.current) return;
+      unauthorizedRef.current = true;
+      setUser(null);
+      setCart([]);
+      supabase.auth.signOut().catch((error) => {
+        console.error("Failed to clear an unauthorized session:", error.message);
+      });
+    };
+    window.addEventListener("fitcheque:unauthorized", handleUnauthorized);
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+      window.removeEventListener("fitcheque:unauthorized", handleUnauthorized);
+    };
   }, []);
 
   useEffect(() => {
@@ -121,7 +169,8 @@ export function AppProvider({ children }) {
 
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) throw new Error(error.message);
-    await supabase.auth.signOut();
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) throw new Error(signOutError.message);
     setUser(null);
     setPasswordRecoveryReady(false);
   };
@@ -132,45 +181,55 @@ export function AppProvider({ children }) {
   //   { status: "totp_required", factorId }
   //   { status: "email_otp_required", email }
   const login = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw new Error(error.message);
-
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", data.user.id)
-      .single();
-    if (profileErr || !profile) throw new Error("Could not load account role");
-
-    if (profile.role === "admin") {
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
-        pendingChallengeRef.current = true;
-        const { data: factors } = await supabase.auth.mfa.listFactors();
-        const totp = factors?.totp?.find((f) => f.status === "verified");
-        if (!totp) {
-          pendingChallengeRef.current = false;
-          await reportActivity("LOGIN");
-          return { status: "ok" }; // admin has no factor enrolled yet — let through, nag elsewhere
-        }
-        return { status: "totp_required", factorId: totp.id };
-      }
-      await reportActivity("LOGIN");
-      return { status: "ok" };
-    }
-
-    // Customer: sign back out, force an emailed code before granting access
     pendingChallengeRef.current = true;
-    await supabase.auth.signOut();
-    const { error: otpErr } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false },
-    });
-    if (otpErr) {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw new Error(error.message);
+
+      const { data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .single();
+      if (profileErr || !profile) throw new Error("Could not load account role");
+
+      if (profile.role === "admin") {
+        const { data: aal, error: aalError } =
+          await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aalError) throw new Error(aalError.message);
+        if (aal?.currentLevel !== "aal2") {
+          const { data: factors, error: factorsError } = await supabase.auth.mfa.listFactors();
+          if (factorsError) throw new Error(factorsError.message);
+          const totp = factors?.totp?.find((factor) => factor.status === "verified");
+          if (!totp) {
+            throw new Error("Admin accounts must set up an authenticator before signing in.");
+          }
+          return { status: "totp_required", factorId: totp.id };
+        }
+
+        pendingChallengeRef.current = false;
+        if (!await loadProfileForSession(data.session)) {
+          throw new Error("Could not verify the admin session. Please sign in again.");
+        }
+        await reportActivity("LOGIN");
+        return { status: "ok" };
+      }
+
+      await supabase.auth.signOut();
+      const { error: otpErr } = await supabase.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false },
+      });
+      if (otpErr) throw new Error(otpErr.message);
+      return { status: "email_otp_required", email };
+    } catch (error) {
       pendingChallengeRef.current = false;
-      throw new Error(otpErr.message);
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) {
+        console.error("Failed to clear the incomplete login session:", signOutError.message);
+      }
+      throw error;
     }
-    return { status: "email_otp_required", email };
   };
 
   const verifyTotpChallenge = async (factorId, code) => {
@@ -184,9 +243,12 @@ export function AppProvider({ children }) {
     });
     if (verifyErr) throw new Error(verifyErr.message);
 
-    pendingChallengeRef.current = false;
     const { data: { session } } = await supabase.auth.getSession();
-    await loadProfileForSession(session);
+    if (!await loadProfileForSession(session)) {
+      pendingChallengeRef.current = false;
+      throw new Error("Could not verify the admin session. Please sign in again.");
+    }
+    pendingChallengeRef.current = false;
     await reportActivity("LOGIN");
     toast(`Welcome back! 🌸`, "success");
   };
@@ -195,10 +257,21 @@ export function AppProvider({ children }) {
     const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
     if (error) throw new Error(error.message);
 
+    if (!await loadProfileForSession(data.session)) {
+      pendingChallengeRef.current = false;
+      throw new Error("Could not verify the authenticated session. Please sign in again.");
+    }
     pendingChallengeRef.current = false;
-    await loadProfileForSession(data.session);
     await reportActivity("LOGIN");
     toast(`Welcome back! 🌸`, "success");
+  };
+
+  const resendEmailOtpChallenge = async (email) => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
+    if (error) throw new Error(error.message);
   };
 
   const cancelChallenge = async () => {
@@ -345,7 +418,7 @@ export function AppProvider({ children }) {
     user, authLoading, cart, toasts, passwordRecoveryReady,
     login, logout, registerUser, completeLogin, completeRegister, updateProfile,
     requestPasswordReset, completePasswordReset,
-    verifyTotpChallenge, verifyEmailOtpChallenge, cancelChallenge,
+    verifyTotpChallenge, verifyEmailOtpChallenge, resendEmailOtpChallenge, cancelChallenge,
     addToCart, removeFromCart, updateQty, clearCart,
     toast,
   };

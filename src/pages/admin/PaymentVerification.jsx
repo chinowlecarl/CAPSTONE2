@@ -80,6 +80,12 @@ export default function PaymentVerification() {
 
   useEffect(() => { if (user?.role === "admin") load(); }, [user?.role, load]);
 
+  useEffect(() => {
+    if (user?.role !== "admin") return;
+    const interval = window.setInterval(load, 30000);
+    return () => window.clearInterval(interval);
+  }, [user?.role, load]);
+
   const viewProof = async (order) => {
     setBusyId(order.id);
     try {
@@ -242,7 +248,17 @@ export default function PaymentVerification() {
                   )}
 
                   {o.payment_status === "PAID" && o.lalamove_order_id && (
-                    <span style={{ fontSize: 12, color: "#666" }}>Lalamove order: <strong style={{ fontFamily: "monospace" }}>{o.lalamove_order_id}</strong></span>
+                    <>
+                      <span style={{ fontSize: 12, color: "#666" }}>
+                        Lalamove order: <strong style={{ fontFamily: "monospace" }}>{o.lalamove_order_id}</strong>
+                        {o.lalamove_status && <> · Status: <strong>{o.lalamove_status.replaceAll("_", " ")}</strong></>}
+                      </span>
+                      {o.lalamove_share_link && (
+                        <a href={o.lalamove_share_link} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#be185d", fontWeight: 700 }}>
+                          Track delivery
+                        </a>
+                      )}
+                    </>
                   )}
 
                   {o.payment_status === "REJECTED" && (

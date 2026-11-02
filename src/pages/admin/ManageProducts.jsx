@@ -15,6 +15,42 @@ function readFileAsDataURL(file) {
   });
 }
 
+function optimizeProductImage(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    const releaseUrl = () => URL.revokeObjectURL(objectUrl);
+
+    image.onload = () => {
+      releaseUrl();
+      const maxDimension = 1200;
+      const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.naturalWidth * scale);
+      canvas.height = Math.round(image.naturalHeight * scale);
+      const context = canvas.getContext("2d");
+      if (!context) {
+        readFileAsDataURL(file).then(resolve, reject);
+        return;
+      }
+
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error("Could not optimize this image."));
+          return;
+        }
+        readFileAsDataURL(blob).then(resolve, reject);
+      }, "image/webp", 0.82);
+    };
+    image.onerror = () => {
+      releaseUrl();
+      reject(new Error("Could not read this image."));
+    };
+    image.src = objectUrl;
+  });
+}
+
 function ImageSlot({ label, value, onChange, inputStyle }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
@@ -23,12 +59,15 @@ function ImageSlot({ label, value, onChange, inputStyle }) {
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) { setError("Please select an image file."); return; }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Please select a JPG, PNG, or WEBP image.");
+      return;
+    }
     if (file.size > 5 * 1024 * 1024) { setError("Image must be under 5MB."); return; }
     setError(null);
     setUploading(true);
     try {
-      const url = await readFileAsDataURL(file);
+      const url = await optimizeProductImage(file);
       onChange(url);
     } catch (err) {
       setError(err.message);
@@ -70,7 +109,7 @@ function ImageSlot({ label, value, onChange, inputStyle }) {
           {uploading ? (
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <div style={{ width:14, height:14, border:"2px solid #fce7f3", borderTopColor:"#be185d", borderRadius:"50%", animation:"spin 0.7s linear infinite" }} />
-              <span style={{ fontSize:12, color:"#be185d", fontWeight:600 }}>Uploading…</span>
+              <span style={{ fontSize:12, color:"#be185d", fontWeight:600 }}>Optimizing image…</span>
             </div>
           ) : value ? (
             <div>
@@ -80,7 +119,7 @@ function ImageSlot({ label, value, onChange, inputStyle }) {
           ) : (
             <div>
               <div style={{ fontSize:12, fontWeight:700, color:"#db2777" }}>Click to upload image</div>
-              <div style={{ fontSize:11, color:"#aaa" }}>JPG, PNG, WEBP · max 5 MB</div>
+              <div style={{ fontSize:11, color:"#aaa" }}>JPG, PNG, WEBP · max 5 MB · resized to 1200px</div>
             </div>
           )}
         </div>
@@ -101,7 +140,7 @@ function ImageSlot({ label, value, onChange, inputStyle }) {
         onBlur={(e)=>(e.target.style.borderColor="#fce7f3")}
       />
       {error && <div style={{ fontSize:11, color:"#be185d", marginTop:4, fontWeight:600 }}>⚠ {error}</div>}
-      <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{ display:"none" }} />
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} style={{ display:"none" }} />
     </div>
   );
 }

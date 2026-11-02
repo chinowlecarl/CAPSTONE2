@@ -20,7 +20,26 @@ export async function apiFetch(path, options = {}) {
     if (res.status === 401) {
       window.dispatchEvent(new Event("fitcheque:unauthorized"));
     }
-    throw new Error(data.error || "Something went wrong");
+    const error = new Error(data.error || "Something went wrong");
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function publicApiFetch(path, options = {}) {
+  const res = await fetch(`${API}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+    ...options,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const error = new Error(data.error || "Something went wrong");
+    error.status = res.status;
+    throw error;
   }
   return data;
 }

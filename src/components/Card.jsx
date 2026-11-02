@@ -40,11 +40,13 @@ function ImageViewer({ images, height, title }) {
       onPointerLeave={() => setDragStartX(null)}
     >
       {/* Slides */}
-      {images.map((src, i) => (
+      {multi && images.map((src, i) => (
         <img
           key={i}
           src={src}
           alt={`${title} – view ${i + 1}`}
+          loading="lazy"
+          decoding="async"
           style={{
             position: "absolute", inset: 0,
             width: "100%", height: "100%", objectFit: "cover",
@@ -61,6 +63,8 @@ function ImageViewer({ images, height, title }) {
         <img
           src={images[0]}
           alt={title}
+          loading="lazy"
+          decoding="async"
           style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform .4s", position: "absolute", inset: 0 }}
           onMouseEnter={(e) => (e.target.style.transform = "scale(1.08)")}
           onMouseLeave={(e) => (e.target.style.transform = "scale(1)")}
@@ -201,6 +205,7 @@ function ProductModal({ product, onClose, onAddToCart }) {
               <img
                 src={images[idx]}
                 alt={`${product.title} – view ${idx + 1}`}
+                decoding="async"
                 style={{ width: "100%", height: "100%", objectFit: "cover", filter: soldOut ? "grayscale(0.6)" : "none" }}
                 onError={(e) => { e.target.src = "https://placehold.co/600x400/fce7f3/be185d?text=FITCHEQUE"; }}
               />
@@ -247,6 +252,8 @@ function ProductModal({ product, onClose, onAddToCart }) {
                     key={i}
                     src={src}
                     alt={`angle ${i + 1}`}
+                    loading="lazy"
+                    decoding="async"
                     onClick={() => setIdx(i)}
                     style={{
                       width: 58, height: 58, objectFit: "cover", borderRadius: 8, cursor: "pointer",
