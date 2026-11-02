@@ -317,6 +317,7 @@ app.get("/api/products/:id/image", async (req, res) => {
     const { data, error } = await supabase.from("products")
       .select("image_url").eq("id", req.params.id).maybeSingle();
     if (error) throw error;
+    res.set("Cross-Origin-Resource-Policy", "cross-origin");
     const match = typeof data?.image_url === "string"
       ? data.image_url.match(/^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/)
       : null;
