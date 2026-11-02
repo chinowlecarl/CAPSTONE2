@@ -21,7 +21,7 @@ export default function Home({ setPage }) {
         const productsById = new Map(home.items.map((product) => [product.id, product]));
         const available = (product) => Number(product.stock) > 0;
         if (active) {
-          setFeatured(home.featuredIds.map((id) => productsById.get(id)).filter((product) => product && available(product)));
+          setFeatured(home.featuredIds.map((id) => productsById.get(id)).filter(Boolean));
           setProducts(home.arrivalIds.map((id) => productsById.get(id)).filter((product) => product && available(product)));
         }
       } catch {
@@ -35,7 +35,7 @@ export default function Home({ setPage }) {
           }
           const available = (product) => Number(product.stock) > 0;
           if (active) {
-            setFeatured(featuredProducts.filter(available).slice(0, 4));
+            setFeatured(featuredProducts.slice(0, 3));
             setProducts(arrivals.filter(available).slice(0, 8));
           }
         } catch (fallbackError) {
