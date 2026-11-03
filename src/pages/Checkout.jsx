@@ -12,7 +12,7 @@ const PAYMENT_METHODS = [
 // TODO: replace with the real business QR code images once provided
 const QR_IMAGES = {
   gcash: "https://placehold.co/280x280/00A1E4/ffffff?text=GCash+QR",
-  maya:  "https://placehold.co/280x280/5CC638/ffffff?text=Maya+QR",
+  maya:  "bc9b3bfe-ebb3-48cc-a39b-8b23d67703f3.jpg",
 };
 
 const PENDING_KEY = "fitcheque_pending_proof";
