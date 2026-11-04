@@ -209,6 +209,31 @@ export default function SalesInsights() {
             </div>
           </div>
 
+          <div style={{ ...card, padding: "18px", marginBottom: 18 }}>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, fontWeight: 800, margin: "0 0 12px", color: "#1a1a1a" }}>
+              Best sellers by category
+            </h2>
+            {(!data.bestSellersByCategory || data.bestSellersByCategory.length === 0) ? (
+              <p style={{ color: "#aaa", fontSize: 13, margin: 0 }}>No paid sales by category in this period.</p>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
+                {data.bestSellersByCategory.map((product) => (
+                  <div key={`${product.category}-${product.id}`} style={{ background: "#fff5f7", border: `1px solid ${LINE}`, borderRadius: 10, padding: "12px 14px" }}>
+                    <div style={{ color: PINK, fontSize: 10, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", marginBottom: 5 }}>
+                      {product.category}
+                    </div>
+                    <div style={{ color: "#1a1a1a", fontSize: 14, fontWeight: 800, marginBottom: 5 }}>
+                      {product.title}
+                    </div>
+                    <div style={{ color: "#777", fontSize: 12 }}>
+                      {product.units} sold · {fmt(product.revenue)} sales
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Products */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14, marginBottom: 18 }}>
             <div style={{ ...card, padding: "18px" }}>

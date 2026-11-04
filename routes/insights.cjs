@@ -13,6 +13,8 @@
 //   - Forecast = straight-line trend over the last 28 days, next 7 days. Only shown when
 //     there is enough history, and always labelled as an estimate.
 
+const { buildBestSellersByCategory } = require("./salesAnalytics.cjs");
+
 module.exports = function registerInsightRoutes(
   app,
   { supabase, auth, adminOnly },
@@ -249,6 +251,7 @@ module.exports = function registerInsightRoutes(
         revenue: round2(p.revenue),
         share: share(p.revenue),
       }));
+    const bestSellersByCategory = buildBestSellersByCategory(curPaid);
     const categories = [...catMap.values()]
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5)
@@ -540,6 +543,7 @@ module.exports = function registerInsightRoutes(
       daily,
       forecast,
       topProducts,
+      bestSellersByCategory,
       categories,
       restock: restock.slice(0, 8),
       slowMovers,
