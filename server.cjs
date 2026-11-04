@@ -204,8 +204,6 @@ app.put("/api/me", auth, async (req, res) => {
 
 const SOLD_PRODUCT_RETENTION_MS = 72 * 60 * 60 * 1000;
 const PUBLIC_PRODUCT_FIELDS = "id,title,description,price,discount,category,stock,featured,created_at";
-const filterShowcaseProducts = (query) =>
-  query.or("archived_at.is.null,auto_archived_after_sale.eq.true");
 const productImageUrl = (req, product) => ({
   ...product,
   image_url: `${req.protocol}://${req.get("host")}/api/products/${encodeURIComponent(product.id)}/image`,
@@ -255,12 +253,12 @@ app.get("/api/products", async (req, res) => {
 
 app.get("/api/products/featured", async (req, res) => {
   try {
-    const { data, error } = await filterShowcaseProducts(supabase.from("products").select(PUBLIC_PRODUCT_FIELDS))
+    const { data, error } = await filterActiveProducts(supabase.from("products").select(PUBLIC_PRODUCT_FIELDS))
       .eq("featured", true)
       .order("created_at", { ascending: false }).limit(8);
     if (error) throw error;
     if (!data || data.length === 0) {
-      const { data: fallback, error: fallbackErr } = await filterShowcaseProducts(
+      const { data: fallback, error: fallbackErr } = await filterActiveProducts(
         supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
       )
         .order("created_at", { ascending: false }).limit(8);
@@ -279,10 +277,10 @@ app.get("/api/products/home", async (req, res) => {
     const productsQuery = () => filterActiveProducts(
       supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
     ).gt("stock", 0).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(8);
-    const featuredQuery = () => filterShowcaseProducts(
+    const featuredQuery = () => filterActiveProducts(
       supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
     ).eq("featured", true).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(4);
-    const showcaseQuery = () => filterShowcaseProducts(
+    const showcaseQuery = () => filterActiveProducts(
       supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
     ).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(8);
 
