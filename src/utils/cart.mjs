@@ -1,39 +1,46 @@
+export function normalizeSingleItemCart(cart) {
+  const seen = new Set();
+  return (Array.isArray(cart) ? cart : []).reduce((items, item) => {
+    const productId = String(item.product_id ?? item.products?.id ?? item.id);
+    if (seen.has(productId)) return items;
+    seen.add(productId);
+    items.push({ ...item, quantity: 1 });
+    return items;
+  }, []);
+}
+
 export function addProductToCart(cart, product) {
   const productId = String(product.id);
-  const index = cart.findIndex((item) =>
+  const exists = cart.some((item) =>
     String(item.product_id ?? item.products?.id ?? item.id) === productId
   );
-  const currentQuantity = index === -1 ? 0 : Number(cart[index].quantity) || 0;
   const availableStock = Number(product.stock) || 0;
 
-  if (currentQuantity + 1 > availableStock) {
+  if (exists) {
     return {
       added: false,
       cart,
-      error: availableStock > 0
-        ? `Only ${availableStock} item${availableStock === 1 ? "" : "s"} available`
-        : "This product is out of stock",
+      error: "This one-of-a-kind item is already in your cart",
     };
   }
 
-  if (index === -1) {
+  if (availableStock < 1) {
     return {
-      added: true,
-      cart: [...cart, { ...product, product_id: product.id, quantity: 1 }],
+      added: false,
+      cart,
+      error: "This product is out of stock",
     };
   }
 
   return {
     added: true,
-    cart: cart.map((item, itemIndex) =>
-      itemIndex === index ? { ...item, quantity: currentQuantity + 1 } : item
-    ),
+    cart: [...cart, { ...product, product_id: product.id, quantity: 1 }],
   };
 }
 
 export function calculateCartSubtotal(cart, getPrice) {
   return cart.reduce(
-    (subtotal, item) => subtotal + getPrice(item) * (Number(item.quantity) || 0),
+    (subtotal, item) => subtotal + getPrice(item),
     0,
   );
 }

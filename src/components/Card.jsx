@@ -308,7 +308,7 @@ function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
                 color: soldOut ? "#ef4444" : "#22c55e",
                 border: `1px solid ${soldOut ? "#fecaca" : "#bbf7d0"}`,
               }}>
-                {soldOut ? "Sold" : `${product.stock} in stock`}
+                {soldOut ? "Sold" : "One of a kind"}
               </span>
             </div>
 

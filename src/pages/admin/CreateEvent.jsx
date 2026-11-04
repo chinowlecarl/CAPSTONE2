@@ -2,7 +2,7 @@ import { useState } from "react";
 import { apiFetch } from "../../utils/api";
 import { useApp } from "../../context/AppContext";
 
-const INITIAL = { title: "", description: "", price: "", discount: "0", category: "", stock: "", featured: false, image_url: "" };
+const INITIAL = { title: "", description: "", price: "", discount: "0", category: "", stock: "1", featured: false, image_url: "" };
 const CATEGORIES = ["Tops","Bottoms","Dresses","Jackets","Accessories"];
 
 export default function CreateEvent({ setPage }) {
@@ -23,7 +23,7 @@ export default function CreateEvent({ setPage }) {
     if (!form.title.trim())    errs.push("Title is required");
     if (!form.category)        errs.push("Category is required");
     if (!form.price || isNaN(+form.price) || +form.price <= 0) errs.push("Valid price is required");
-    if (form.stock.trim() === "" || !Number.isInteger(Number(form.stock)) || +form.stock < 0) errs.push("Stock must be a whole number of 0 or more");
+    if (!["0", "1"].includes(form.stock)) errs.push("Choose whether the one-of-a-kind item is available or sold");
     return errs;
   };
 
@@ -99,10 +99,13 @@ export default function CreateEvent({ setPage }) {
             </div>
 
             <div>
-              <label style={labelStyle}>Stock *</label>
-              <input type="number" value={form.stock} onChange={sf("stock")} min="0" step="1" placeholder="0"
-                style={inputStyle}
-                onFocus={(e)=>(e.target.style.borderColor="#db2777")} onBlur={(e)=>(e.target.style.borderColor="#fce7f3")} />
+              <label style={labelStyle}>Item availability</label>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "#555" }}>
+                <input type="checkbox" checked={form.stock === "1"}
+                  onChange={(e) => setForm((current) => ({ ...current, stock: e.target.checked ? "1" : "0" }))}
+                  style={{ width: 16, height: 16, accentColor: "#be185d" }} />
+                Available for sale
+              </label>
             </div>
 
             <div style={{ gridColumn: "1 / -1" }}>
@@ -169,7 +172,7 @@ export default function CreateEvent({ setPage }) {
             {[
               "Use high-quality square images (500×500px)",
               "Write descriptions under 150 characters",
-              "Set stock to 0 to mark as out of stock",
+              "Each listing is a unique garment. Uncheck when it has been sold.",
               "Featured items appear in the hero banner",
             ].map((tip) => (
               <p key={tip} style={{ fontSize: 12, color: "#777", margin: "0 0 6px", paddingLeft: 12, borderLeft: "2px solid #fce7f3" }}>{tip}</p>

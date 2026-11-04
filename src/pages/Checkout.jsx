@@ -601,9 +601,8 @@ export default function Checkout({ setPage }) {
                     onError={(e) => (e.target.src = "https://placehold.co/48/fce7f3/be185d?text=?")} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 12, fontWeight: 700, color: "#1a1a1a", margin: "0 0 2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{getName(item)}</p>
-                    <p style={{ fontSize: 11, color: "#aaa", margin: 0 }}>Qty: {item.quantity}</p>
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: "#be185d", flexShrink: 0 }}>{fmt(getPrice(item) * item.quantity)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: "#be185d", flexShrink: 0 }}>{fmt(getPrice(item))}</span>
                 </div>
               ))}
             </div>
