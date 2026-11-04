@@ -1,5 +1,6 @@
 import { useApp } from "../context/AppContext";
 import { fmt, salePrice } from "../utils/api";
+import { calculateCartTotals } from "../utils/cart.mjs";
 
 export default function Cart({ setPage }) {
   const { cart, removeFromCart, user } = useApp();
@@ -15,10 +16,7 @@ export default function Cart({ setPage }) {
 
   const hasSoldOutItem = cart.some((item) => getStock(item) === 0);
 
-  const subtotal = cart.reduce((s, i) => s + getPrice(i), 0);
-  const shipping = subtotal > 500 ? 0 : 80;
-  const tax = subtotal * 0.12;
-  const total = subtotal + shipping + tax;
+  const { subtotal, shipping, tax, total } = calculateCartTotals(cart, getPrice);
 
   return (
     <div style={{ background: "#fff5f7", minHeight: "100vh" }}>
@@ -45,13 +43,13 @@ export default function Cart({ setPage }) {
                     <div style={{ flex: 1 }}>
                       <p style={{ color: "#db2777", fontSize: 10, fontWeight: 700, letterSpacing: 1, margin: "0 0 3px", textTransform: "uppercase" }}>{getCat(item)}</p>
                       <h4 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700, color: "#1a1a1a", fontFamily: "'Playfair Display', serif" }}>{getName(item)}</h4>
-                      <span style={{ color: "#be185d", fontWeight: 800 }}>{fmt(getPrice(item))}</span>
+                      <span style={{ color: "#be185d", fontWeight: 800 }}>Qty: {item.quantity}</span>
                       {soldOut && (
                         <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: "#ef4444" }}>⚠ No longer available — please remove</div>
                       )}
                     </div>
                     <div style={{ textAlign: "right", minWidth: 80 }}>
-                      <div style={{ fontWeight: 800, color: "#1a1a1a", marginBottom: 6 }}>{fmt(getPrice(item))}</div>
+                      <div style={{ fontWeight: 800, color: "#1a1a1a", marginBottom: 6 }}>{fmt(getPrice(item) * Number(item.quantity || 0))}</div>
                       <button onClick={() => removeFromCart(item.id || item.product_id)} style={{ background: "none", border: "none", color: "#f9a8d4", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Remove</button>
                     </div>
                   </div>

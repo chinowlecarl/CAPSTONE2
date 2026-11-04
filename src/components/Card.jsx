@@ -148,7 +148,7 @@ function arrowStyle(side) {
 }
 
 // ── Product Detail Modal ──────────────────────────────────────────────────────
-function ProductModal({ product, onClose, onAddToCart }) {
+function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
   const images = getImages(product);
   const [idx, setIdx] = useState(0);
   const sp = salePrice(product.price, product.discount);
@@ -314,17 +314,19 @@ function ProductModal({ product, onClose, onAddToCart }) {
 
             {/* Add to cart */}
             <button
-              onClick={() => { onAddToCart(product); onClose(); }}
-              disabled={soldOut}
+              onClick={async () => {
+                if (await onAddToCart(product)) onClose();
+              }}
+              disabled={soldOut || addingToCart}
               style={{
-                background: soldOut ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
-                border: "none", borderRadius: 12, color: soldOut ? "#9ca3af" : "#fff",
+                background: soldOut || addingToCart ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
+                border: "none", borderRadius: 12, color: soldOut || addingToCart ? "#9ca3af" : "#fff",
                 fontWeight: 800, fontSize: 14, letterSpacing: 1, padding: "14px 0",
-                cursor: soldOut ? "not-allowed" : "pointer",
+                cursor: soldOut || addingToCart ? "not-allowed" : "pointer",
                 marginTop: "auto",
               }}
             >
-              {soldOut ? "SOLD" : "ADD TO CART"}
+              {soldOut ? "SOLD" : addingToCart ? "ADDING..." : "ADD TO CART"}
             </button>
           </div>
         </div>
@@ -335,11 +337,12 @@ function ProductModal({ product, onClose, onAddToCart }) {
 
 // ── Card ───────────────────────────────────────────────────────────────────
 export function Card({ product, compact = false }) {
-  const { addToCart } = useApp();
+  const { addToCart, addingProducts } = useApp();
   const [showModal, setShowModal] = useState(false);
   const sp = salePrice(product.price, product.discount);
   const images = getImages(product);
   const soldOut = product.stock === 0;
+  const addingToCart = Boolean(addingProducts[String(product.id)]);
 
   return (
     <>
@@ -348,6 +351,7 @@ export function Card({ product, compact = false }) {
           product={product}
           onClose={() => setShowModal(false)}
           onAddToCart={addToCart}
+          addingToCart={addingToCart}
         />
       )}
     <div
@@ -440,18 +444,21 @@ export function Card({ product, compact = false }) {
           </span>
         </div>
         <button
-          onClick={(e) => { e.stopPropagation(); if (!soldOut) addToCart(product); }}
-          disabled={soldOut}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!soldOut) addToCart(product);
+          }}
+          disabled={soldOut || addingToCart}
           style={{
             width: "100%",
-            background: soldOut ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
-            border: "none", borderRadius: 8, color: soldOut ? "#9ca3af" : "#fff",
+            background: soldOut || addingToCart ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
+            border: "none", borderRadius: 8, color: soldOut || addingToCart ? "#9ca3af" : "#fff",
             fontWeight: 700, fontSize: compact ? 10 : 12, letterSpacing: 0.8,
             padding: compact ? "7px 0" : "10px 0",
-            cursor: soldOut ? "not-allowed" : "pointer",
+            cursor: soldOut || addingToCart ? "not-allowed" : "pointer",
           }}
         >
-          {soldOut ? "SOLD" : "ADD TO CART"}
+          {soldOut ? "SOLD" : addingToCart ? "ADDING..." : "ADD TO CART"}
         </button>
       </div>
     </div>

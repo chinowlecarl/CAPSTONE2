@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { fmt, salePrice, apiFetch } from "../utils/api";
+import { calculateCartTotals } from "../utils/cart.mjs";
 import DeliveryLocationPicker from "../components/DeliveryLocationPicker";
 
 const PAYMENT_METHODS = [
@@ -27,10 +28,7 @@ export default function Checkout({ setPage }) {
   const getName = (item) => item.products?.title || item.title;
   const getImg  = (item) => item.products?.image_url || item.image_url;
 
-  const subtotal = checkoutCart.reduce((s, i) => s + getPrice(i) * i.quantity, 0);
-  const shipping = subtotal > 500 ? 0 : 80;
-  const tax      = subtotal * 0.12;
-  const total    = subtotal + shipping + tax;
+  const { subtotal, shipping, tax, total } = calculateCartTotals(checkoutCart, getPrice);
 
   const [step, setStep]       = useState(1); // 1=details, 2=payment, 2.5=proof (gcash/maya only), 3=success
   const [payment, setPayment] = useState("cod");
