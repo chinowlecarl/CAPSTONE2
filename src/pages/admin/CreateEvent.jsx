@@ -23,7 +23,7 @@ export default function CreateEvent({ setPage }) {
     if (!form.title.trim())    errs.push("Title is required");
     if (!form.category)        errs.push("Category is required");
     if (!form.price || isNaN(+form.price) || +form.price <= 0) errs.push("Valid price is required");
-    if (isNaN(+form.stock) || +form.stock < 0) errs.push("Stock must be 0 or more");
+    if (form.stock.trim() === "" || !Number.isInteger(Number(form.stock)) || +form.stock < 0) errs.push("Stock must be a whole number of 0 or more");
     return errs;
   };
 
@@ -100,7 +100,7 @@ export default function CreateEvent({ setPage }) {
 
             <div>
               <label style={labelStyle}>Stock *</label>
-              <input type="number" value={form.stock} onChange={sf("stock")} min="0" placeholder="0"
+              <input type="number" value={form.stock} onChange={sf("stock")} min="0" step="1" placeholder="0"
                 style={inputStyle}
                 onFocus={(e)=>(e.target.style.borderColor="#db2777")} onBlur={(e)=>(e.target.style.borderColor="#fce7f3")} />
             </div>

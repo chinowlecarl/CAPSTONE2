@@ -202,6 +202,15 @@ export default function ManageProducts({ setPage }) {
   };
 
   const save = async () => {
+    if (String(form.stock).trim() === "") {
+      showMsg("Enter the quantity available in stock.", "error");
+      return;
+    }
+    const stock = Number(form.stock);
+    if (!Number.isInteger(stock) || stock < 0) {
+      showMsg("Stock must be a whole number of 0 or more.", "error");
+      return;
+    }
     try {
       // Use the first filled image as image_url; store extras in image_url_2/3/4 if columns exist,
       // but at minimum only image_url is required by the DB.
@@ -211,7 +220,7 @@ export default function ManageProducts({ setPage }) {
         price: +form.price,
         discount: +form.discount,
         category: form.category,
-        stock: +form.stock,
+        stock,
         featured: form.featured,
         image_url: form.image_url || form.extra_images.find(Boolean) || "",
       };
@@ -332,7 +341,7 @@ export default function ManageProducts({ setPage }) {
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
               <thead>
                 <tr style={{ background:"linear-gradient(135deg,#fce7f3,#fbcfe8)" }}>
-                  {["Image","Product","Category","Price","Availability","Featured","Actions"].map((h)=>(
+                  {["Image","Product","Category","Price","Stock","Featured","Actions"].map((h)=>(
                     <th key={h} style={{ padding:"12px 14px", textAlign:"left", fontSize:10, fontWeight:800, color:"#be185d", letterSpacing:1.2, textTransform:"uppercase", borderBottom:"1.5px solid #fce7f3" }}>{h}</th>
                   ))}
                 </tr>
@@ -363,7 +372,7 @@ export default function ManageProducts({ setPage }) {
                     </td>
                     <td style={{ padding:"18px 14px" }}>
                       <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:700, background:p.stock===0?"#fff5f5":"#f0fdf4", color:p.stock===0?"#ef4444":"#22c55e" }}>
-                        {p.stock===0 ? "Sold" : "Available"}
+                        {Number(p.stock) > 0 ? `${p.stock} available` : "Sold"}
                       </span>
                     </td>
                     <td style={{ padding:"18px 14px", textAlign:"center" }}>
@@ -420,15 +429,25 @@ export default function ManageProducts({ setPage }) {
                 <ImageSlot key={i} label={`IMAGE — ANGLE ${i + 2} (optional)`} value={url} onChange={(val) => setExtraImage(i, val)} inputStyle={inputStyle} />
               ))}
 
-              <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", fontSize:13, fontWeight:600, color:"#555" }}>
+              <div>
+                <label htmlFor="product-stock" style={{ display:"block", fontSize:10, fontWeight:800, color:"#888", letterSpacing:1.5, marginBottom:6 }}>
+                  QUANTITY IN STOCK *
+                </label>
                 <input
-                  type="checkbox"
-                  checked={+form.stock > 0}
-                  onChange={(e) => setForm((f) => ({ ...f, stock: e.target.checked ? "1" : "0" }))}
-                  style={{ width:16, height:16, accentColor:"#be185d" }}
+                  id="product-stock"
+                  type="number"
+                  value={form.stock}
+                  onChange={sf("stock")}
+                  min="0"
+                  step="1"
+                  required
+                  inputMode="numeric"
+                  style={inputStyle}
                 />
-                ✅ Item is available (uncheck when sold)
-              </label>
+                <p style={{ color:"#999", fontSize:11, margin:"5px 0 0" }}>
+                  Set the total quantity available. Use 0 when sold out.
+                </p>
+              </div>
 
               <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", fontSize:13, fontWeight:600, color:"#555" }}>
                 <input type="checkbox" checked={form.featured} onChange={sf("featured")} style={{ width:16, height:16, accentColor:"#be185d" }} />

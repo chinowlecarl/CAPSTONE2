@@ -3,7 +3,7 @@ import { fmt, salePrice } from "../utils/api";
 import { calculateCartTotals } from "../utils/cart.mjs";
 
 export default function Cart({ setPage }) {
-  const { cart, removeFromCart, user } = useApp();
+  const { cart, removeFromCart, updateQty, updatingCartItems, user } = useApp();
 
   const getPrice = (item) => {
     const p = item.products || item;
@@ -12,9 +12,11 @@ export default function Cart({ setPage }) {
   const getName = (item) => item.products?.title || item.title;
   const getImg = (item) => item.products?.image_url || item.image_url;
   const getCat = (item) => item.products?.category || item.category;
-  const getStock = (item) => item.products?.stock ?? item.stock ?? 1;
+  const getStock = (item) => Number(item.products?.stock ?? item.stock) || 0;
 
-  const hasSoldOutItem = cart.some((item) => getStock(item) === 0);
+  const hasUnavailableItem = cart.some((item) =>
+    getStock(item) === 0 || Number(item.quantity) > getStock(item)
+  );
 
   const { subtotal, shipping, tax, total } = calculateCartTotals(cart, getPrice);
 
@@ -37,15 +39,40 @@ export default function Cart({ setPage }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {cart.map((item, idx) => {
                 const soldOut = getStock(item) === 0;
+                const exceedsStock = Number(item.quantity) > getStock(item);
+                const cartItemId = item.id || item.product_id;
+                const updating = Boolean(updatingCartItems[String(cartItemId)]);
                 return (
                   <div key={item.id || idx} style={{ background: "#fff", borderRadius: 14, padding: 16, display: "flex", gap: 16, alignItems: "center", border: soldOut ? "1.5px solid #fecaca" : "1px solid #fce7f3", boxShadow: "0 2px 8px rgba(190,24,93,0.05)", opacity: soldOut ? 0.7 : 1 }}>
                     <img src={getImg(item)} alt={getName(item)} style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 10, flexShrink: 0, filter: soldOut ? "grayscale(1)" : "none" }} onError={(e) => (e.target.src = "https://via.placeholder.com/80/fce7f3/be185d?text=??")} />
                     <div style={{ flex: 1 }}>
                       <p style={{ color: "#db2777", fontSize: 10, fontWeight: 700, letterSpacing: 1, margin: "0 0 3px", textTransform: "uppercase" }}>{getCat(item)}</p>
                       <h4 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700, color: "#1a1a1a", fontFamily: "'Playfair Display', serif" }}>{getName(item)}</h4>
-                      <span style={{ color: "#be185d", fontWeight: 800 }}>Qty: {item.quantity}</span>
-                      {soldOut && (
-                        <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: "#ef4444" }}>⚠ No longer available — please remove</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                        <button
+                          type="button"
+                          aria-label={`Decrease ${getName(item)} quantity`}
+                          onClick={() => Number(item.quantity) <= 1
+                            ? removeFromCart(cartItemId)
+                            : updateQty(cartItemId, Number(item.quantity) - 1)}
+                          disabled={updating}
+                          style={{ width: 28, height: 28, border: "1px solid #fce7f3", borderRadius: 7, background: "#fff", color: "#be185d", fontWeight: 800, cursor: updating ? "wait" : "pointer" }}
+                        >−</button>
+                        <span style={{ color: "#be185d", fontWeight: 800, minWidth: 62, textAlign: "center" }}>
+                          {updating ? "Saving..." : `Qty: ${item.quantity}`}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Increase ${getName(item)} quantity`}
+                          onClick={() => updateQty(cartItemId, Number(item.quantity) + 1)}
+                          disabled={updating || soldOut || Number(item.quantity) >= getStock(item)}
+                          style={{ width: 28, height: 28, border: "1px solid #fce7f3", borderRadius: 7, background: "#fff", color: "#be185d", fontWeight: 800, cursor: updating || soldOut || Number(item.quantity) >= getStock(item) ? "not-allowed" : "pointer" }}
+                        >+</button>
+                      </div>
+                      {(soldOut || exceedsStock) && (
+                        <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: "#ef4444" }}>
+                          ⚠ {soldOut ? "No longer available — please remove" : `Only ${getStock(item)} available — adjust quantity`}
+                        </div>
                       )}
                     </div>
                     <div style={{ textAlign: "right", minWidth: 80 }}>
@@ -73,17 +100,17 @@ export default function Cart({ setPage }) {
               <span>TOTAL</span>
               <span style={{ color: "#be185d" }}>{fmt(total)}</span>
             </div>
-            {hasSoldOutItem && (
+            {hasUnavailableItem && (
               <div style={{ marginTop: 14, fontSize: 12, fontWeight: 700, color: "#ef4444", background: "#fff5f5", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px" }}>
-                ⚠ Remove sold-out items to continue
+                ⚠ Adjust or remove unavailable items to continue
               </div>
             )}
             <button
               onClick={() => user ? setPage("checkout") : setPage("login")}
-              disabled={hasSoldOutItem}
-              style={{ width: "100%", background: hasSoldOutItem ? "#e5e5e5" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)", border: "none", borderRadius: 10, color: hasSoldOutItem ? "#999" : "#fff", fontWeight: 800, fontSize: 13, letterSpacing: 1, padding: "14px 0", cursor: hasSoldOutItem ? "not-allowed" : "pointer", marginTop: 20 }}
+              disabled={hasUnavailableItem}
+              style={{ width: "100%", background: hasUnavailableItem ? "#e5e5e5" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)", border: "none", borderRadius: 10, color: hasUnavailableItem ? "#999" : "#fff", fontWeight: 800, fontSize: 13, letterSpacing: 1, padding: "14px 0", cursor: hasUnavailableItem ? "not-allowed" : "pointer", marginTop: 20 }}
             >
-              {hasSoldOutItem ? "REMOVE SOLD-OUT ITEMS" : user ? "PROCEED TO CHECKOUT" : "LOGIN TO CHECKOUT"}
+              {hasUnavailableItem ? "ADJUST CART QUANTITIES" : user ? "PROCEED TO CHECKOUT" : "LOGIN TO CHECKOUT"}
             </button>
           </div>
         )}
