@@ -1,6 +1,7 @@
 
 import { apiFetch } from "../utils/api";
 import { supabase } from "../utils/supabase";
+import { addProductToCart, createCartAddGuard } from "../utils/cart.mjs";
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 
 export const AppContext = createContext(null);
@@ -15,12 +16,31 @@ const isPasswordResetLocation = () => {
 };
 
 const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
+const GUEST_CART_STORAGE_KEY = "fitcheque:guest-cart";
+
+const loadGuestCart = () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(GUEST_CART_STORAGE_KEY) || "[]");
+    return Array.isArray(stored) ? stored : [];
+  } catch {
+    return [];
+  }
+};
 
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [passwordRecoveryReady, setPasswordRecoveryReady] = useState(false);
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(loadGuestCart);
+  const [addingProducts, setAddingProducts] = useState({});
+  const cartRef = useRef(cart);
+  const cartRevisionRef = useRef(0);
+  const addToCartGuardRef = useRef(createCartAddGuard());
+  const replaceCart = (nextCart) => {
+    cartRevisionRef.current += 1;
+    cartRef.current = nextCart;
+    setCart(nextCart);
+  };
   const [toasts, setToasts] = useState([]);
   const initialHashParams = new URLSearchParams(window.location.hash.slice(1));
   const recoveryCallbackRef = useRef(initialHashParams.get("type") === "recovery");
@@ -33,6 +53,23 @@ export function AppProvider({ children }) {
 
   const pendingChallengeRef = useRef(false);
   const unauthorizedRef = useRef(false);
+
+  useEffect(() => {
+    cartRef.current = cart;
+    if (!user) {
+      try {
+        localStorage.setItem(GUEST_CART_STORAGE_KEY, JSON.stringify(cart));
+      } catch (error) {
+        console.warn("Could not save the guest cart:", error.message);
+      }
+    } else {
+      try {
+        localStorage.removeItem(GUEST_CART_STORAGE_KEY);
+      } catch (error) {
+        console.warn("Could not clear the saved guest cart:", error.message);
+      }
+    }
+  }, [cart, user?.id]);
 
 
   const loadProfileForSession = async (session) => {
@@ -108,7 +145,7 @@ export function AppProvider({ children }) {
         }
         if (event === "SIGNED_OUT") {
           setUser(null);
-          setCart([]);
+          replaceCart([]);
           setPasswordRecoveryReady(false);
         }
         if (pendingChallengeRef.current) return;
@@ -121,7 +158,7 @@ export function AppProvider({ children }) {
       if (unauthorizedRef.current) return;
       unauthorizedRef.current = true;
       setUser(null);
-      setCart([]);
+      replaceCart([]);
       supabase.auth.signOut().catch((error) => {
         console.error("Failed to clear an unauthorized session:", error.message);
       });
@@ -136,11 +173,15 @@ export function AppProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (user) {
-      apiFetch("/cart").then(setCart).catch(() => {});
-    } else {
-      setCart([]);
-    }
+    if (!user?.id) return undefined;
+    let active = true;
+    const revision = cartRevisionRef.current;
+    apiFetch("/cart")
+      .then((items) => {
+        if (active && cartRevisionRef.current === revision) replaceCart(items);
+      })
+      .catch((error) => console.error("Could not load the customer cart:", error.message));
+    return () => { active = false; };
   }, [user?.id]);
 
   useEffect(() => {
@@ -167,7 +208,7 @@ export function AppProvider({ children }) {
       }
       localStorage.removeItem(activityKey);
       setUser(null);
-      setCart([]);
+      replaceCart([]);
       toast("You were signed out after 1 hour of inactivity.", "info");
     };
 
@@ -373,7 +414,7 @@ export function AppProvider({ children }) {
     await supabase.auth.signOut();
     if (user?.id) localStorage.removeItem(`fitcheque:last-activity:${user.id}`);
     setUser(null);
-    setCart([]);
+    replaceCart([]);
     toast("Logged out successfully.", "info");
   };
 
@@ -425,28 +466,54 @@ export function AppProvider({ children }) {
   // ── CART (unchanged — still via Express) ───────────────────
 
   const addToCart = async (product) => {
-    if (user) {
-      try {
-        await apiFetch("/cart", {
+    const productId = String(product.id);
+    if (!addToCartGuardRef.current.tryStart(productId)) return false;
+    setAddingProducts((current) => ({ ...current, [productId]: true }));
+    try {
+      if (user) {
+        const result = await apiFetch("/cart", {
           method: "POST",
           body: JSON.stringify({ product_id: product.id, quantity: 1 }),
         });
-        const updated = await apiFetch("/cart");
-        setCart(updated);
+        const currentCart = cartRef.current;
+        const index = currentCart.findIndex(
+          (item) => String(item.product_id) === String(product.id)
+        );
+        const item = {
+          ...result.item,
+          quantity: Math.max(
+            Number(result.item.quantity) || 0,
+            Number(currentCart[index]?.quantity) || 0
+          ),
+          products: product,
+        };
+        const updated = index === -1
+          ? [...currentCart, item]
+          : currentCart.map((current, currentIndex) =>
+              currentIndex === index ? item : current
+            );
+        replaceCart(updated);
         toast(`${product.title} added to cart! 🛍`, "success");
-      } catch (err) {
-        toast(err.message || "Failed to add to cart", "error");
+      } else {
+        const result = addProductToCart(cartRef.current, product);
+        if (!result.added) {
+          toast(result.error, "error");
+          return false;
+        }
+        replaceCart(result.cart);
+        toast(`${product.title} added to cart! 🛍`, "success");
       }
-    } else {
-      setCart((c) => {
-        const found = c.find((i) => i.product_id === product.id);
-        if (found)
-          return c.map((i) =>
-            i.product_id === product.id ? { ...i, quantity: i.quantity + 1 } : i
-          );
-        return [...c, { ...product, product_id: product.id, quantity: 1 }];
+      return true;
+    } catch (err) {
+      toast(err.message || "Failed to add to cart", "error");
+      return false;
+    } finally {
+      addToCartGuardRef.current.finish(productId);
+      setAddingProducts((current) => {
+        const next = { ...current };
+        delete next[productId];
+        return next;
       });
-      toast(`${product.title} added to cart! 🛍`, "success");
     }
   };
 
@@ -455,12 +522,12 @@ export function AppProvider({ children }) {
       try {
         await apiFetch(`/cart/${id}`, { method: "DELETE" });
         const updated = await apiFetch("/cart");
-        setCart(updated);
+        replaceCart(updated);
       } catch (err) {
         toast(err.message || "Failed to remove item", "error");
       }
     } else {
-      setCart((c) => c.filter((i) => i.product_id !== id && i.id !== id));
+      replaceCart(cartRef.current.filter((i) => i.product_id !== id && i.id !== id));
     }
   };
 
@@ -473,28 +540,35 @@ export function AppProvider({ children }) {
           body: JSON.stringify({ quantity: qty }),
         });
         const updated = await apiFetch("/cart");
-        setCart(updated);
+        replaceCart(updated);
       } catch (err) {
         toast(err.message || "Failed to update quantity", "error");
       }
     } else {
-      setCart((c) =>
-        c.map((i) =>
-          i.product_id === id || i.id === id ? { ...i, quantity: qty } : i
-        )
+      const current = cartRef.current;
+      const item = current.find((i) => i.product_id === id || i.id === id);
+      const availableStock = Number(item?.products?.stock ?? item?.stock) || 0;
+      if (qty > availableStock) {
+        toast(`Only ${availableStock} item${availableStock === 1 ? "" : "s"} available`, "error");
+        return;
+      }
+      const updated = current.map((i) =>
+        i.product_id === id || i.id === id ? { ...i, quantity: qty } : i
       );
+      cartRef.current = updated;
+      replaceCart(updated);
     }
   };
   const clearCart = async () => {
     if (user) { 
       try {
         const updated = await apiFetch("/cart");
-        setCart(updated);
+        replaceCart(updated);
       } catch {
-        setCart([]);
+        replaceCart([]);
       }
     } else {
-      setCart([]);
+      replaceCart([]);
     }
   };
 
@@ -506,7 +580,7 @@ export function AppProvider({ children }) {
     login, logout, registerUser, completeLogin, completeRegister, updateProfile,
     requestPasswordReset, completePasswordReset,
     verifyTotpChallenge, verifyEmailOtpChallenge, resendEmailOtpChallenge, cancelChallenge,
-    addToCart, removeFromCart, updateQty, clearCart,
+    addToCart, addingProducts, removeFromCart, updateQty, clearCart,
     toast,
   };
 

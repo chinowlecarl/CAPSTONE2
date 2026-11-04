@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { fmt, salePrice, apiFetch } from "../utils/api";
+import { calculateCartTotals } from "../utils/cart.mjs";
 import DeliveryLocationPicker from "../components/DeliveryLocationPicker";
 
 const PAYMENT_METHODS = [
@@ -65,10 +66,7 @@ export default function Checkout({ setPage }) {
   const getName = (item) => item.products?.title || item.title;
   const getImg  = (item) => item.products?.image_url || item.image_url;
 
-  const subtotal = checkoutCart.reduce((s, i) => s + getPrice(i) * i.quantity, 0);
-  const shipping = subtotal > 500 ? 0 : 80;
-  const tax      = subtotal * 0.12;
-  const total    = subtotal + shipping + tax;
+  const { subtotal, shipping, tax, total } = calculateCartTotals(checkoutCart, getPrice);
 
   // Restore a pending GCash/Maya order if the page was refreshed
   const [saved] = useState(readPending);

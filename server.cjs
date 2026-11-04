@@ -416,25 +416,23 @@ app.get("/api/cart", auth, async (req, res) => {
 app.post("/api/cart", auth, async (req, res) => {
   const { product_id, quantity } = req.body;
   if (!product_id) return res.status(400).json({ error: "Product ID required" });
+  const requestedQuantity = Number(quantity ?? 1);
+  if (!Number.isInteger(requestedQuantity) || requestedQuantity < 1) {
+    return res.status(400).json({ error: "Quantity must be a positive whole number" });
+  }
   try {
-    const { data: product, error: productErr } = await supabase.from("products")
-      .select("id").eq("id", product_id).is("archived_at", null).maybeSingle();
-    if (productErr) throw productErr;
-    if (!product) return res.status(404).json({ error: "This product is no longer available" });
-    const { data: existing } = await supabase.from("cart_items").select("*")
-      .eq("user_id", req.user.id).eq("product_id", product_id).maybeSingle();
-    if (existing) {
-      const { data, error } = await supabase.from("cart_items")
-        .update({ quantity: existing.quantity + (Math.abs(+quantity) || 1) })
-        .eq("id", existing.id).select().single();
-      if (error) throw error;
-      return res.json({ message: "Cart updated!", item: data });
+    const { data, error } = await supabase.rpc("add_cart_item", {
+      p_user_id: req.user.id,
+      p_product_id: product_id,
+      p_quantity: requestedQuantity,
+    });
+    if (error) {
+      if (error.code === "P1001") return res.status(404).json({ error: error.message });
+      if (error.code === "P1002") return res.status(409).json({ error: error.message });
+      if (error.code === "P1003") return res.status(400).json({ error: error.message });
+      throw error;
     }
-    const { data, error } = await supabase.from("cart_items")
-      .insert([{ user_id: req.user.id, product_id, quantity: Math.abs(+quantity) || 1 }])
-      .select().single();
-    if (error) throw error;
-    res.status(201).json({ message: "Added to cart!", item: data });
+    res.json({ message: "Cart updated!", item: data });
   } catch (err) {
     console.error(`[CART ERROR] ${err.message}`);
     res.status(500).json({ error: "Failed to update cart" });
@@ -442,12 +440,28 @@ app.post("/api/cart", auth, async (req, res) => {
 });
 
 app.put("/api/cart/:id", auth, async (req, res) => {
-  const quantity = Math.abs(+req.body.quantity);
+  const quantity = Number(req.body.quantity);
+  if (!Number.isInteger(quantity) || quantity < 0) {
+    return res.status(400).json({ error: "Quantity must be a non-negative whole number" });
+  }
   try {
     if (!quantity) {
       await supabase.from("cart_items").delete()
         .eq("id", req.params.id).eq("user_id", req.user.id);
       return res.json({ message: "Item removed" });
+    }
+    const { data: cartItem, error: cartItemErr } = await supabase.from("cart_items")
+      .select("product_id, products(stock)")
+      .eq("id", req.params.id).eq("user_id", req.user.id).maybeSingle();
+    if (cartItemErr) throw cartItemErr;
+    if (!cartItem) return res.status(404).json({ error: "Cart item not found" });
+    const availableStock = Number(cartItem.products?.stock) || 0;
+    if (quantity > availableStock) {
+      return res.status(409).json({
+        error: availableStock > 0
+          ? `Only ${availableStock} item${availableStock === 1 ? "" : "s"} available`
+          : "This product is out of stock",
+      });
     }
     const { data, error } = await supabase.from("cart_items")
       .update({ quantity })
@@ -526,9 +540,21 @@ app.post("/api/orders", auth, async (req, res) => {
     return res.status(400).json({ error: "Invalid delivery coordinates" });
   }
   try {
-    const { data: cart } = await supabase.from("cart_items")
+    const { data: cart, error: cartErr } = await supabase.from("cart_items")
       .select("*, products(*)").eq("user_id", req.user.id);
+    if (cartErr) throw cartErr;
     if (!cart?.length) return res.status(400).json({ error: "Cart is empty" });
+
+    for (const item of cart) {
+      const availableStock = Number(item.products?.stock) || 0;
+      if (item.quantity > availableStock) {
+        return res.status(409).json({
+          error: availableStock > 0
+            ? `Only ${availableStock} ${item.products?.title || "item"}${availableStock === 1 ? " is" : "s are"} available`
+            : `${item.products?.title || "This product"} is out of stock`,
+        });
+      }
+    }
 
     const total = cart.reduce((s, i) => {
       const p     = i.products;
