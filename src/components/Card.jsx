@@ -152,7 +152,7 @@ function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
   const images = getImages(product);
   const [idx, setIdx] = useState(0);
   const sp = salePrice(product.price, product.discount);
-  const soldOut = product.stock === 0;
+  const soldOut = !Number.isInteger(Number(product.stock)) || Number(product.stock) <= 0;
 
   // Close on backdrop click
   const onBackdrop = (e) => { if (e.target === e.currentTarget) onClose(); };
@@ -300,7 +300,7 @@ function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
               {product.description || "No description available."}
             </p>
 
-            {/* Stock badge — single item only, so just Available / Sold */}
+            {/* Stock badge */}
             <div>
               <span style={{
                 padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700,
@@ -308,7 +308,7 @@ function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
                 color: soldOut ? "#ef4444" : "#22c55e",
                 border: `1px solid ${soldOut ? "#fecaca" : "#bbf7d0"}`,
               }}>
-                {soldOut ? "Sold" : "Available — 1 of a kind"}
+                {soldOut ? "Sold" : `${product.stock} in stock`}
               </span>
             </div>
 
@@ -341,7 +341,7 @@ export function Card({ product, compact = false }) {
   const [showModal, setShowModal] = useState(false);
   const sp = salePrice(product.price, product.discount);
   const images = getImages(product);
-  const soldOut = product.stock === 0;
+  const soldOut = !Number.isInteger(Number(product.stock)) || Number(product.stock) <= 0;
   const addingToCart = Boolean(addingProducts[String(product.id)]);
 
   return (

@@ -33,9 +33,11 @@ export function AppProvider({ children }) {
   const [passwordRecoveryReady, setPasswordRecoveryReady] = useState(false);
   const [cart, setCart] = useState(loadGuestCart);
   const [addingProducts, setAddingProducts] = useState({});
+  const [updatingCartItems, setUpdatingCartItems] = useState({});
   const cartRef = useRef(cart);
   const cartRevisionRef = useRef(0);
   const addToCartGuardRef = useRef(createCartAddGuard());
+  const updateCartLocksRef = useRef(new Set());
   const replaceCart = (nextCart) => {
     cartRevisionRef.current += 1;
     cartRef.current = nextCart;
@@ -533,30 +535,40 @@ export function AppProvider({ children }) {
 
   const updateQty = async (id, qty) => {
     if (qty < 1) { removeFromCart(id); return; }
-    if (user) {
-      try {
+    const itemId = String(id);
+    if (updateCartLocksRef.current.has(itemId)) return;
+    updateCartLocksRef.current.add(itemId);
+    setUpdatingCartItems((current) => ({ ...current, [itemId]: true }));
+    try {
+      if (user) {
         await apiFetch(`/cart/${id}`, {
           method: "PUT",
           body: JSON.stringify({ quantity: qty }),
         });
         const updated = await apiFetch("/cart");
         replaceCart(updated);
-      } catch (err) {
-        toast(err.message || "Failed to update quantity", "error");
+      } else {
+        const current = cartRef.current;
+        const item = current.find((i) => i.product_id === id || i.id === id);
+        const availableStock = Number(item?.products?.stock ?? item?.stock) || 0;
+        if (qty > availableStock) {
+          toast(`Only ${availableStock} item${availableStock === 1 ? "" : "s"} available`, "error");
+          return;
+        }
+        const updated = current.map((i) =>
+          i.product_id === id || i.id === id ? { ...i, quantity: qty } : i
+        );
+        replaceCart(updated);
       }
-    } else {
-      const current = cartRef.current;
-      const item = current.find((i) => i.product_id === id || i.id === id);
-      const availableStock = Number(item?.products?.stock ?? item?.stock) || 0;
-      if (qty > availableStock) {
-        toast(`Only ${availableStock} item${availableStock === 1 ? "" : "s"} available`, "error");
-        return;
-      }
-      const updated = current.map((i) =>
-        i.product_id === id || i.id === id ? { ...i, quantity: qty } : i
-      );
-      cartRef.current = updated;
-      replaceCart(updated);
+    } catch (err) {
+      toast(err.message || "Failed to update quantity", "error");
+    } finally {
+      updateCartLocksRef.current.delete(itemId);
+      setUpdatingCartItems((current) => {
+        const next = { ...current };
+        delete next[itemId];
+        return next;
+      });
     }
   };
   const clearCart = async () => {
@@ -580,7 +592,7 @@ export function AppProvider({ children }) {
     login, logout, registerUser, completeLogin, completeRegister, updateProfile,
     requestPasswordReset, completePasswordReset,
     verifyTotpChallenge, verifyEmailOtpChallenge, resendEmailOtpChallenge, cancelChallenge,
-    addToCart, addingProducts, removeFromCart, updateQty, clearCart,
+    addToCart, addingProducts, removeFromCart, updateQty, updatingCartItems, clearCart,
     toast,
   };
 

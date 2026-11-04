@@ -350,16 +350,20 @@ app.post("/api/products", auth, adminOnly, async (req, res) => {
   title       = sanitize(title);
   category    = sanitize(category);
   description = sanitize(description);
+  const stockQuantity = Number(stock);
   if (!title || !price || !category)
     return res.status(400).json({ error: "Title, price, category required" });
   if (isNaN(+price) || +price < 0)
     return res.status(400).json({ error: "Invalid price" });
+  if (stock === undefined || stock === null || String(stock).trim() === "" ||
+    !Number.isInteger(stockQuantity) || stockQuantity < 0)
+    return res.status(400).json({ error: "Stock must be a whole number of 0 or more" });
   try {
     const { data, error } = await supabase.from("products")
       .insert([{
         title, description, price: +price,
         discount: +discount || 0, category, image_url,
-        stock: +stock || 0, featured: !!featured
+        stock: stockQuantity, featured: !!featured
       }]).select().single();
     if (error) {
       console.error(`[ADD PRODUCT ERROR] Supabase: ${error.message} | code: ${error.code} | details: ${error.details}`);
@@ -380,9 +384,13 @@ app.put("/api/products/:id", auth, adminOnly, async (req, res) => {
   title       = sanitize(title);
   category    = sanitize(category);
   description = sanitize(description);
+  const stockQuantity = Number(stock);
+  if (stock === undefined || stock === null || String(stock).trim() === "" ||
+    !Number.isInteger(stockQuantity) || stockQuantity < 0)
+    return res.status(400).json({ error: "Stock must be a whole number of 0 or more" });
   try {
     const { data, error } = await supabase.from("products")
-      .update({ title, description, price: +price, discount: +discount, category, image_url, stock: +stock, featured: !!featured })
+      .update({ title, description, price: +price, discount: +discount, category, image_url, stock: stockQuantity, featured: !!featured })
       .eq("id", req.params.id).select().single();
     if (error) {
       console.error(`[UPDATE PRODUCT ERROR] Supabase: ${error.message} | code: ${error.code} | details: ${error.details}`);
@@ -448,24 +456,17 @@ app.put("/api/cart/:id", auth, async (req, res) => {
         .eq("id", req.params.id).eq("user_id", req.user.id);
       return res.json({ message: "Item removed" });
     }
-    const { data: cartItem, error: cartItemErr } = await supabase.from("cart_items")
-      .select("product_id, products(stock)")
-      .eq("id", req.params.id).eq("user_id", req.user.id).maybeSingle();
-    if (cartItemErr) throw cartItemErr;
-    if (!cartItem) return res.status(404).json({ error: "Cart item not found" });
-    const availableStock = Number(cartItem.products?.stock) || 0;
-    if (quantity > availableStock) {
-      return res.status(409).json({
-        error: availableStock > 0
-          ? `Only ${availableStock} item${availableStock === 1 ? "" : "s"} available`
-          : "This product is out of stock",
-      });
+    const { data, error } = await supabase.rpc("update_cart_item_quantity", {
+      p_user_id: req.user.id,
+      p_cart_item_id: req.params.id,
+      p_quantity: quantity,
+    });
+    if (error) {
+      if (error.code === "P2001") return res.status(404).json({ error: error.message });
+      if (error.code === "P2002") return res.status(409).json({ error: error.message });
+      if (error.code === "P2003") return res.status(400).json({ error: error.message });
+      throw error;
     }
-    const { data, error } = await supabase.from("cart_items")
-      .update({ quantity })
-      .eq("id", req.params.id).eq("user_id", req.user.id)
-      .select().single();
-    if (error) throw error;
     res.json({ message: "Updated!", item: data });
   } catch (err) { res.status(500).json({ error: "Failed to update cart item" }); }
 });
