@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { fmt, salePrice, apiFetch } from "../utils/api";
 import { calculateCartTotals } from "../utils/cart.mjs";
+import { getCheckoutOrderRequest, getPostCheckoutStep } from "../utils/checkout.mjs";
 import DeliveryLocationPicker from "../components/DeliveryLocationPicker";
 
 const PAYMENT_METHODS = [
@@ -95,33 +96,33 @@ export default function Checkout({ setPage }) {
     orderLockRef.current = true;
     setLoading(true);
     try {
-      if (orderId) {
-        setStep(2.5);
-        return;
-      }
-
       if (!deliveryLocation) throw new Error("Pin the exact delivery location on the map first.");
       const addressPart = form.address ? `${form.address}, ` : "";
       const shipping_address = `${addressPart}${form.city} ${form.zip} — Phone: ${form.phone}`;
-      const data = await apiFetch("/orders", {
-        method: "POST",
+      const request = getCheckoutOrderRequest(orderId);
+      const data = await apiFetch(request.path, {
+        method: request.method,
         body: JSON.stringify({
           shipping_address,
           delivery_lat: deliveryLocation.lat,
           delivery_lng: deliveryLocation.lng,
+          payment_method: payment.toUpperCase(),
         }),
       });
-      if (!data.order?.id) throw new Error("The order was created but no order ID was returned.");
-      setOrderId(data.order.id);
-      await clearCart();
+      const currentOrderId = orderId || data.order?.id;
+      if (!currentOrderId) throw new Error("The order was created but no order ID was returned.");
+      if (!orderId) {
+        setOrderId(currentOrderId);
+        await clearCart();
+      }
 
-      if (payment === "gcash" || payment === "maya") {
+      if (getPostCheckoutStep(payment) === 2.5) {
         // Order exists as PENDING payment — now show QR + collect proof
         setStep(2.5);
-        toast("Order created! Please complete your payment.", "success");
+        toast(orderId ? "Payment method updated. Please complete your payment." : "Order created! Please complete your payment.", "success");
       } else {
-        setStep(3);
-        toast("Order placed successfully! 🎉", "success");
+        setStep(getPostCheckoutStep(payment));
+        toast(orderId ? "Order updated successfully! 🎉" : "Order placed successfully! 🎉", "success");
       }
     } catch (err) {
       toast(err.message, "error");
@@ -420,10 +421,10 @@ export default function Checkout({ setPage }) {
 
               <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
                 <button
-                  onClick={() => setPage("cart")}
+                  onClick={() => setPage(orderId ? "profile" : "cart")}
                   style={{ flex: 1, background: "#fff", border: "1.5px solid #fce7f3", borderRadius: 12, color: "#be185d", fontWeight: 700, fontSize: 13, padding: "13px 0", cursor: "pointer" }}
                 >
-                  ← BACK TO CART
+                  {orderId ? "← BACK TO MY ORDERS" : "← BACK TO CART"}
                 </button>
                 <button
                   onClick={() => { if (validateStep1()) setStep(2); else alert("Please fill in all required fields, pin the exact delivery location, and use a Philippine mobile number like 09XXXXXXXXX."); }}
@@ -441,9 +442,9 @@ export default function Checkout({ setPage }) {
               <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 900, color: "#1a1a1a", margin: "0 0 24px" }}>Payment Method</h2>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
-                {(orderId ? PAYMENT_METHODS.filter((method) => ["gcash", "maya"].includes(method.id)) : PAYMENT_METHODS).map((pm) => (
-                  <button key={pm.id} onClick={() => handlePaymentSelection(pm.id)}
-                    style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", border: `2px solid ${payment === pm.id ? "#be185d" : "#fce7f3"}`, borderRadius: 12, background: payment === pm.id ? "#fff5f7" : "#fff", cursor: "pointer", textAlign: "left", transition: "all .2s" }}>
+                {PAYMENT_METHODS.map((pm) => (
+                  <button key={pm.id} onClick={() => handlePaymentSelection(pm.id)} disabled={loading}
+                    style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", border: `2px solid ${payment === pm.id ? "#be185d" : "#fce7f3"}`, borderRadius: 12, background: payment === pm.id ? "#fff5f7" : "#fff", cursor: loading ? "wait" : "pointer", textAlign: "left", transition: "all .2s" }}>
                     <span style={{ fontSize: 28 }}>{pm.icon}</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 800, color: "#1a1a1a", fontSize: 14 }}>{pm.label}</div>
@@ -458,7 +459,7 @@ export default function Checkout({ setPage }) {
 
               {orderId && (
                 <p role="status" style={{ color: "#9d174d", background: "#fff5f7", border: "1px solid #fce7f3", borderRadius: 10, padding: 12, margin: "0 0 20px", fontSize: 13 }}>
-                  Order #{orderId.slice(0, 8).toUpperCase()} is still awaiting payment. Select GCash or Maya to continue without creating another order.
+                  Order #{orderId.slice(0, 8).toUpperCase()} is still awaiting payment. You can change the payment method without creating another order.
                 </p>
               )}
 
@@ -511,14 +512,18 @@ export default function Checkout({ setPage }) {
                 <p style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", margin: "0 0 2px" }}>{form.fullname}</p>
                 <p style={{ fontSize: 12, color: "#888", margin: "0 0 2px" }}>{form.address ? `${form.address}, ` : ""}{form.city} {form.zip}</p>
                 <p style={{ fontSize: 12, color: "#888", margin: 0 }}>{form.phone}</p>
-                {!orderId && <button onClick={() => setStep(1)} style={{ background: "none", border: "none", color: "#be185d", fontSize: 12, fontWeight: 700, cursor: "pointer", padding: "6px 0 0", textDecoration: "underline" }}>Edit details</button>}
+                <button onClick={() => setStep(1)} style={{ background: "none", border: "none", color: "#be185d", fontSize: 12, fontWeight: 700, cursor: "pointer", padding: "6px 0 0", textDecoration: "underline" }}>Edit details</button>
               </div>
 
               <div style={{ display: "flex", gap: 10 }}>
-                <button onClick={() => setStep(1)} disabled={loading || !!orderId} style={{ flex: 1, background: "#fff", border: "1.5px solid #fce7f3", borderRadius: 12, color: "#be185d", fontWeight: 700, fontSize: 13, padding: "13px 0", cursor: "pointer" }}>← BACK</button>
-                <button onClick={placeOrder} disabled={loading || !["gcash", "maya"].includes(payment) && !!orderId}
+                <button onClick={() => setStep(1)} disabled={loading} style={{ flex: 1, background: "#fff", border: "1.5px solid #fce7f3", borderRadius: 12, color: "#be185d", fontWeight: 700, fontSize: 13, padding: "13px 0", cursor: "pointer" }}>← BACK</button>
+                <button onClick={placeOrder} disabled={loading}
                   style={{ flex: 2, background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 12, color: "#fff", fontWeight: 800, fontSize: 14, letterSpacing: 1, padding: "13px 0", cursor: "pointer", opacity: loading ? 0.7 : 1 }}>
-                  {loading ? "PLACING ORDER..." : orderId ? "CONTINUE TO PAYMENT →" : "PLACE ORDER 🌸"}
+                  {loading
+                    ? "UPDATING ORDER..."
+                    : orderId
+                      ? ["gcash", "maya"].includes(payment) ? "CONTINUE TO PAYMENT →" : "UPDATE ORDER 🌸"
+                      : "PLACE ORDER 🌸"}
                 </button>
               </div>
             </div>

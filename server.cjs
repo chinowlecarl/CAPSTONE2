@@ -524,8 +524,54 @@ app.get("/api/orders/:id/items", auth, async (req, res) => {
   }
 });
 
+app.put("/api/orders/:id/checkout", auth, async (req, res) => {
+  const { shipping_address, delivery_lat, delivery_lng, payment_method } = req.body;
+  const methods = ["COD", "GCASH", "MAYA", "CARD"];
+  if (!methods.includes(payment_method)) {
+    return res.status(400).json({ error: "Select a valid payment method" });
+  }
+  const latitude = Number(delivery_lat);
+  const longitude = Number(delivery_lng);
+  if (
+    !Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+    !Number.isFinite(longitude) || longitude < -180 || longitude > 180
+  ) {
+    return res.status(400).json({ error: "Invalid delivery coordinates" });
+  }
+
+  try {
+    const { data: order, error } = await supabase.from("orders")
+      .update({
+        shipping_address: sanitize(shipping_address) || "",
+        delivery_lat: latitude,
+        delivery_lng: longitude,
+        payment_method,
+      })
+      .eq("id", req.params.id)
+      .eq("user_id", req.user.id)
+      .eq("status", "pending")
+      .eq("payment_status", "PENDING")
+      .select()
+      .maybeSingle();
+    if (error) throw error;
+    if (!order) {
+      return res.status(409).json({
+        error: "This order is no longer awaiting payment and cannot be changed.",
+      });
+    }
+    res.json({ message: "Checkout details updated!", order });
+  } catch (err) {
+    console.error(`[ORDER CHECKOUT UPDATE ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to update checkout details" });
+  }
+});
+
 app.post("/api/orders", auth, async (req, res) => {
-  const { shipping_address, delivery_lat, delivery_lng } = req.body;
+  const { shipping_address, delivery_lat, delivery_lng, payment_method } = req.body;
+  const methods = ["COD", "GCASH", "MAYA", "CARD"];
+  if (!methods.includes(payment_method)) {
+    return res.status(400).json({ error: "Select a valid payment method" });
+  }
   const hasLatitude = delivery_lat !== undefined && delivery_lat !== null && delivery_lat !== "";
   const hasLongitude = delivery_lng !== undefined && delivery_lng !== null && delivery_lng !== "";
   if (hasLatitude !== hasLongitude) {
@@ -569,6 +615,7 @@ app.post("/api/orders", auth, async (req, res) => {
         shipping_address: sanitize(shipping_address) || "",
         delivery_lat: latitude,
         delivery_lng: longitude,
+        payment_method,
         status: "pending"
       }]).select().single();
     if (oErr) throw oErr;

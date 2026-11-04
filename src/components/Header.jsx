@@ -3,8 +3,7 @@ import { useApp } from "../context/AppContext";
 import { HeaderNavLink } from "./HeaderNavLink";
 
 export function Header({ page, setPage }) {
-  const { user, cart } = useApp();
-  const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
+  const { user } = useApp();
   const [open, setOpen] = useState(false);
   const goToPage = (nextPage) => {
     setPage(nextPage);
@@ -103,24 +102,6 @@ export function Header({ page, setPage }) {
             </button>
           )}
 
-          <button
-            aria-label={`Open cart${cartCount > 0 ? `, ${cartCount} items` : ""}`}
-            onClick={() => goToPage("cart")}
-            style={{ position: "relative", background: "none", border: "none", cursor: "pointer", marginLeft: 4 }}
-          >
-            <span style={{ fontSize: 20 }}>🛍</span>
-            {cartCount > 0 && (
-              <span style={{
-                position: "absolute", top: -4, right: -6,
-                background: "#be185d", color: "#fff",
-                borderRadius: "50%", width: 16, height: 16,
-                fontSize: 9, fontWeight: 800,
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                {cartCount}
-              </span>
-            )}
-          </button>
         </div>
       </div>
     </nav>
