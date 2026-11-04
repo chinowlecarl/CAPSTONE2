@@ -356,8 +356,8 @@ app.post("/api/products", auth, adminOnly, async (req, res) => {
   if (isNaN(+price) || +price < 0)
     return res.status(400).json({ error: "Invalid price" });
   if (stock === undefined || stock === null || String(stock).trim() === "" ||
-    !Number.isInteger(stockQuantity) || stockQuantity < 0)
-    return res.status(400).json({ error: "Stock must be a whole number of 0 or more" });
+    !Number.isInteger(stockQuantity) || ![0, 1].includes(stockQuantity))
+    return res.status(400).json({ error: "A unique product must be either available (1) or sold (0)" });
   try {
     const { data, error } = await supabase.from("products")
       .insert([{
@@ -386,8 +386,8 @@ app.put("/api/products/:id", auth, adminOnly, async (req, res) => {
   description = sanitize(description);
   const stockQuantity = Number(stock);
   if (stock === undefined || stock === null || String(stock).trim() === "" ||
-    !Number.isInteger(stockQuantity) || stockQuantity < 0)
-    return res.status(400).json({ error: "Stock must be a whole number of 0 or more" });
+    !Number.isInteger(stockQuantity) || ![0, 1].includes(stockQuantity))
+    return res.status(400).json({ error: "A unique product must be either available (1) or sold (0)" });
   try {
     const { data, error } = await supabase.from("products")
       .update({ title, description, price: +price, discount: +discount, category, image_url, stock: stockQuantity, featured: !!featured })
@@ -423,8 +423,8 @@ app.post("/api/cart", auth, async (req, res) => {
   const { product_id, quantity } = req.body;
   if (!product_id) return res.status(400).json({ error: "Product ID required" });
   const requestedQuantity = Number(quantity ?? 1);
-  if (!Number.isInteger(requestedQuantity) || requestedQuantity < 1) {
-    return res.status(400).json({ error: "Quantity must be a positive whole number" });
+  if (requestedQuantity !== 1) {
+    return res.status(400).json({ error: "Each unique product can only be added once" });
   }
   try {
     const { data, error } = await supabase.rpc("add_cart_item", {
@@ -447,8 +447,8 @@ app.post("/api/cart", auth, async (req, res) => {
 
 app.put("/api/cart/:id", auth, async (req, res) => {
   const quantity = Number(req.body.quantity);
-  if (!Number.isInteger(quantity) || quantity < 0) {
-    return res.status(400).json({ error: "Quantity must be a non-negative whole number" });
+  if (quantity !== 0 && quantity !== 1) {
+    return res.status(400).json({ error: "Each unique product can only have a quantity of one" });
   }
   try {
     if (!quantity) {
@@ -585,63 +585,19 @@ app.post("/api/orders", auth, async (req, res) => {
     return res.status(400).json({ error: "Invalid delivery coordinates" });
   }
   try {
-    const { data: cart, error: cartErr } = await supabase.from("cart_items")
-      .select("*, products(*)").eq("user_id", req.user.id);
-    if (cartErr) throw cartErr;
-    if (!cart?.length) return res.status(400).json({ error: "Cart is empty" });
-
-    for (const item of cart) {
-      const availableStock = Number(item.products?.stock) || 0;
-      if (item.quantity > availableStock) {
-        return res.status(409).json({
-          error: availableStock > 0
-            ? `Only ${availableStock} ${item.products?.title || "item"}${availableStock === 1 ? " is" : "s are"} available`
-            : `${item.products?.title || "This product"} is out of stock`,
-        });
-      }
+    const { data: order, error } = await supabase.rpc("place_single_item_order", {
+      p_user_id: req.user.id,
+      p_shipping_address: sanitize(shipping_address) || "",
+      p_delivery_lat: latitude,
+      p_delivery_lng: longitude,
+      p_payment_method: payment_method,
+    });
+    if (error) {
+      if (error.code === "P3001") return res.status(409).json({ error: error.message });
+      if (error.code === "P3002") return res.status(400).json({ error: error.message });
+      if (error.code === "P3003") return res.status(400).json({ error: error.message });
+      throw error;
     }
-
-    const total = cart.reduce((s, i) => {
-      const p     = i.products;
-      const price = p.discount > 0 ? p.price * (1 - p.discount / 100) : p.price;
-      return s + price * i.quantity;
-    }, 0);
-
-    const { data: order, error: oErr } = await supabase.from("orders")
-      .insert([{
-        user_id: req.user.id,
-        total_amount: Math.round(total * 100) / 100,
-        shipping_address: sanitize(shipping_address) || "",
-        delivery_lat: latitude,
-        delivery_lng: longitude,
-        payment_method,
-        status: "pending"
-      }]).select().single();
-    if (oErr) throw oErr;
-
-    await supabase.from("order_items").insert(
-      cart.map(i => ({
-        order_id:   order.id,
-        product_id: i.product_id,
-        quantity:   i.quantity,
-        unit_price: i.products.discount > 0
-          ? i.products.price * (1 - i.products.discount / 100)
-          : i.products.price
-      }))
-    );
-
-    for (const item of cart) {
-      const currentStock = item.products.stock || 0;
-      const newStock = Math.max(0, currentStock - item.quantity);
-      const { error: stockErr } = await supabase.from("products")
-        .update({ stock: newStock })
-        .eq("id", item.product_id);
-      if (stockErr) {
-        console.error(`[STOCK UPDATE ERROR] product ${item.product_id}: ${stockErr.message}`);
-      }
-    }
-
-    await supabase.from("cart_items").delete().eq("user_id", req.user.id);
     console.log(`[ORDER] ${new Date().toISOString()} - Order placed by user: ${req.user.id}`);
     res.status(201).json({ message: "Order placed!", order });
   } catch (err) {
@@ -658,55 +614,18 @@ app.put("/api/orders/:id", auth, async (req, res) => {
     return res.status(400).json({ error: "Invalid status value" });
 
   try {
-    const { data: existingOrder, error: findErr } = await supabase
-      .from("orders")
-      .select("id, user_id, status, delivery_status")
-      .eq("id", req.params.id)
-      .eq("user_id", req.user.id)
-      .single();
-
-    if (findErr || !existingOrder)
-      return res.status(404).json({ error: "Order not found" });
-
-    if (!["pending", "confirmed"].includes(existingOrder.status))
-      if (
-        ["BOOKING", "BOOKED", "PICKED_UP", "DELIVERED"].includes(
-          existingOrder.delivery_status,
-        )
-      )
-        return res
-          .status(400)
-          .json({
-            error:
-              "A delivery is already booked for this order. Please contact the shop.",
-          });
-
-    const { data: orderItems } = await supabase
-      .from("order_items")
-      .select("product_id, quantity, products(stock)")
-      .eq("order_id", req.params.id);
-
-    if (orderItems?.length) {
-      for (const item of orderItems) {
-        const restoredStock = (item.products?.stock || 0) + item.quantity;
-        const { error: stockErr } = await supabase
-          .from("products")
-          .update({ stock: restoredStock })
-          .eq("id", item.product_id);
-        if (stockErr) {
-          console.error(`[STOCK RESTORE ERROR] product ${item.product_id}: ${stockErr.message}`);
-        }
+    const { data, error } = await supabase.rpc("cancel_single_item_order", {
+      p_order_id: req.params.id,
+      p_user_id: req.user.id,
+      p_is_admin: false,
+    });
+    if (error) {
+      if (error.code === "P4001") return res.status(404).json({ error: error.message });
+      if (error.code === "P4002" || error.code === "P4003") {
+        return res.status(409).json({ error: error.message });
       }
+      throw error;
     }
-
-    const { data, error } = await supabase
-      .from("orders")
-      .update({ status: "cancelled" })
-      .eq("id", req.params.id)
-      .eq("user_id", req.user.id)
-      .select()
-      .single();
-    if (error) throw error;
 
     console.log(`[ORDER CANCELLED] ${new Date().toISOString()} - Order ${req.params.id} by user ${req.user.id}`);
     res.json({ message: "Order cancelled!", order: data });
@@ -757,26 +676,19 @@ app.put("/api/admin/orders/:id", auth, adminOnly, async (req, res) => {
     return res.status(400).json({ error: "Invalid status value" });
   try {
     if (status === "cancelled") {
-      const { data: existingOrder } = await supabase.from("orders")
-        .select("status").eq("id", req.params.id).single();
-
-      if (existingOrder && existingOrder.status !== "cancelled") {
-        const { data: orderItems } = await supabase.from("order_items")
-          .select("product_id, quantity, products(stock)")
-          .eq("order_id", req.params.id);
-
-        if (orderItems?.length) {
-          for (const item of orderItems) {
-            const restoredStock = (item.products?.stock || 0) + item.quantity;
-            const { error: stockErr } = await supabase.from("products")
-              .update({ stock: restoredStock })
-              .eq("id", item.product_id);
-            if (stockErr) {
-              console.error(`[STOCK RESTORE ERROR] product ${item.product_id}: ${stockErr.message}`);
-            }
-          }
+      const { data, error } = await supabase.rpc("cancel_single_item_order", {
+        p_order_id: req.params.id,
+        p_user_id: req.user.id,
+        p_is_admin: true,
+      });
+      if (error) {
+        if (error.code === "P4001") return res.status(404).json({ error: error.message });
+        if (error.code === "P4002" || error.code === "P4003") {
+          return res.status(409).json({ error: error.message });
         }
+        throw error;
       }
+      return res.json({ message: "Status updated!", order: data });
     }
 
     const { data, error } = await supabase.from("orders")

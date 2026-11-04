@@ -207,18 +207,14 @@ export default function ManageProducts({ setPage }) {
       (p.images && p.images[2]) || "",
       (p.images && p.images[3]) || "",
     ];
-    setForm({ title:p.title, description:p.description||"", price:p.price, discount:p.discount, category:p.category, stock:p.stock, featured:!!p.featured, image_url:p.image_url||"", extra_images:ei });
+    setForm({ title:p.title, description:p.description||"", price:p.price, discount:p.discount, category:p.category, stock:Number(p.stock) > 0 ? "1" : "0", featured:!!p.featured, image_url:p.image_url||"", extra_images:ei });
     setEditP(p); setModal(true);
   };
 
   const save = async () => {
-    if (String(form.stock).trim() === "") {
-      showMsg("Enter the quantity available in stock.", "error");
-      return;
-    }
     const stock = Number(form.stock);
-    if (!Number.isInteger(stock) || stock < 0) {
-      showMsg("Stock must be a whole number of 0 or more.", "error");
+    if (stock !== 0 && stock !== 1) {
+      showMsg("Choose whether the one-of-a-kind item is available or sold.", "error");
       return;
     }
     try {
@@ -269,7 +265,7 @@ export default function ManageProducts({ setPage }) {
     return matchCat && matchSearch;
   });
 
-  const soldOutCount = products.filter((p) => p.stock === 0).length;
+  const soldOutCount = products.filter((p) => Number(p.stock) === 0).length;
 
   if (!user || user.role !== "admin") return null;
 
@@ -331,7 +327,7 @@ export default function ManageProducts({ setPage }) {
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
               <thead>
                 <tr style={{ background:"linear-gradient(135deg,#fce7f3,#fbcfe8)" }}>
-                  {["Image","Product","Category","Price","Stock","Featured","Actions"].map((h)=>(
+                  {["Image","Product","Category","Price","Availability","Featured","Actions"].map((h)=>(
                     <th key={h} style={{ padding:"12px 14px", textAlign:"left", fontSize:10, fontWeight:800, color:"#be185d", letterSpacing:1.2, textTransform:"uppercase", borderBottom:"1.5px solid #fce7f3" }}>{h}</th>
                   ))}
                 </tr>
@@ -361,8 +357,8 @@ export default function ManageProducts({ setPage }) {
                       ) : <div style={{ fontWeight:700 }}>{fmt(p.price)}</div>}
                     </td>
                     <td style={{ padding:"18px 14px" }}>
-                      <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:700, background:p.stock===0?"#fff5f5":"#f0fdf4", color:p.stock===0?"#ef4444":"#22c55e" }}>
-                        {Number(p.stock) > 0 ? `${p.stock} available` : "Sold"}
+                      <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:700, background:Number(p.stock)===0?"#fff5f5":"#f0fdf4", color:Number(p.stock)===0?"#ef4444":"#22c55e" }}>
+                        {Number(p.stock) > 0 ? "Available" : "Sold"}
                       </span>
                     </td>
                     <td style={{ padding:"18px 14px", textAlign:"center" }}>
@@ -421,21 +417,20 @@ export default function ManageProducts({ setPage }) {
 
               <div>
                 <label htmlFor="product-stock" style={{ display:"block", fontSize:10, fontWeight:800, color:"#888", letterSpacing:1.5, marginBottom:6 }}>
-                  QUANTITY IN STOCK *
+                  ITEM AVAILABILITY
                 </label>
-                <input
-                  id="product-stock"
-                  type="number"
-                  value={form.stock}
-                  onChange={sf("stock")}
-                  min="0"
-                  step="1"
-                  required
-                  inputMode="numeric"
-                  style={inputStyle}
-                />
+                <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:600, color:"#555" }}>
+                  <input
+                    id="product-stock"
+                    type="checkbox"
+                    checked={Number(form.stock) === 1}
+                    onChange={(e) => setForm((current) => ({ ...current, stock: e.target.checked ? "1" : "0" }))}
+                    style={{ width:16, height:16, accentColor:"#be185d" }}
+                  />
+                  Available for sale
+                </label>
                 <p style={{ color:"#999", fontSize:11, margin:"5px 0 0" }}>
-                  Set the total quantity available. Use 0 when sold out.
+                  This listing represents one unique garment. Uncheck it when sold.
                 </p>
               </div>
 

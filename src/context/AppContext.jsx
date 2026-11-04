@@ -1,7 +1,7 @@
 
 import { apiFetch } from "../utils/api";
 import { supabase } from "../utils/supabase";
-import { addProductToCart, createCartAddGuard } from "../utils/cart.mjs";
+import { addProductToCart, createCartAddGuard, normalizeSingleItemCart } from "../utils/cart.mjs";
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 
 export const AppContext = createContext(null);
@@ -21,7 +21,7 @@ const GUEST_CART_STORAGE_KEY = "fitcheque:guest-cart";
 const loadGuestCart = () => {
   try {
     const stored = JSON.parse(localStorage.getItem(GUEST_CART_STORAGE_KEY) || "[]");
-    return Array.isArray(stored) ? stored : [];
+    return Array.isArray(stored) ? normalizeSingleItemCart(stored) : [];
   } catch {
     return [];
   }
@@ -33,15 +33,14 @@ export function AppProvider({ children }) {
   const [passwordRecoveryReady, setPasswordRecoveryReady] = useState(false);
   const [cart, setCart] = useState(loadGuestCart);
   const [addingProducts, setAddingProducts] = useState({});
-  const [updatingCartItems, setUpdatingCartItems] = useState({});
   const cartRef = useRef(cart);
   const cartRevisionRef = useRef(0);
   const addToCartGuardRef = useRef(createCartAddGuard());
-  const updateCartLocksRef = useRef(new Set());
   const replaceCart = (nextCart) => {
+    const normalizedCart = normalizeSingleItemCart(nextCart);
     cartRevisionRef.current += 1;
-    cartRef.current = nextCart;
-    setCart(nextCart);
+    cartRef.current = normalizedCart;
+    setCart(normalizedCart);
   };
   const [toasts, setToasts] = useState([]);
   const initialHashParams = new URLSearchParams(window.location.hash.slice(1));
@@ -533,44 +532,6 @@ export function AppProvider({ children }) {
     }
   };
 
-  const updateQty = async (id, qty) => {
-    if (qty < 1) { removeFromCart(id); return; }
-    const itemId = String(id);
-    if (updateCartLocksRef.current.has(itemId)) return;
-    updateCartLocksRef.current.add(itemId);
-    setUpdatingCartItems((current) => ({ ...current, [itemId]: true }));
-    try {
-      if (user) {
-        await apiFetch(`/cart/${id}`, {
-          method: "PUT",
-          body: JSON.stringify({ quantity: qty }),
-        });
-        const updated = await apiFetch("/cart");
-        replaceCart(updated);
-      } else {
-        const current = cartRef.current;
-        const item = current.find((i) => i.product_id === id || i.id === id);
-        const availableStock = Number(item?.products?.stock ?? item?.stock) || 0;
-        if (qty > availableStock) {
-          toast(`Only ${availableStock} item${availableStock === 1 ? "" : "s"} available`, "error");
-          return;
-        }
-        const updated = current.map((i) =>
-          i.product_id === id || i.id === id ? { ...i, quantity: qty } : i
-        );
-        replaceCart(updated);
-      }
-    } catch (err) {
-      toast(err.message || "Failed to update quantity", "error");
-    } finally {
-      updateCartLocksRef.current.delete(itemId);
-      setUpdatingCartItems((current) => {
-        const next = { ...current };
-        delete next[itemId];
-        return next;
-      });
-    }
-  };
   const clearCart = async () => {
     if (user) { 
       try {
@@ -592,7 +553,7 @@ export function AppProvider({ children }) {
     login, logout, registerUser, completeLogin, completeRegister, updateProfile,
     requestPasswordReset, completePasswordReset,
     verifyTotpChallenge, verifyEmailOtpChallenge, resendEmailOtpChallenge, cancelChallenge,
-    addToCart, addingProducts, removeFromCart, updateQty, updatingCartItems, clearCart,
+    addToCart, addingProducts, removeFromCart, clearCart,
     toast,
   };
 
