@@ -32,7 +32,7 @@ export default function App() {
   });
  
   return (
-    <AppProvider>
+    <AppProvider onRequireLogin={() => setPage("login")}>
       <>
         <Main page={page} setPage={setPage}>
           <Suspense fallback={<div role="status" style={{ padding: 48, textAlign: "center", color: "#be185d" }}>Loading page...</div>}>
