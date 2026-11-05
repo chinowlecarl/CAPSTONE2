@@ -10,6 +10,7 @@ import {
   normalizeVariantOptions,
   normalizeVariantSelection,
 } from "../src/utils/productVariants.mjs";
+import { getProductAvailability } from "../src/utils/productAvailability.mjs";
 
 test("a one-of-a-kind product can only be added once", () => {
   const product = { id: "dress-1", title: "Floral Dress", stock: 1 };
@@ -79,4 +80,23 @@ test("variant selection requires one valid choice for every configured attribute
     color: "Blue",
   });
   assert.deepEqual(normalizeVariantSelection({}, {}), {});
+});
+
+test("pending payment reservation expires after two minutes", () => {
+  const product = { stock: 0, reserved_until: "2026-11-05T10:02:00.000Z" };
+  const now = Date.parse("2026-11-05T10:00:00.000Z");
+
+  assert.deepEqual(getProductAvailability(product, now), {
+    available: false,
+    paymentPending: true,
+  });
+  assert.deepEqual(getProductAvailability(product, now + 120_000), {
+    available: true,
+    paymentPending: false,
+    reservationExpired: true,
+  });
+  assert.deepEqual(getProductAvailability({ stock: 0 }, now), {
+    available: false,
+    paymentPending: false,
+  });
 });

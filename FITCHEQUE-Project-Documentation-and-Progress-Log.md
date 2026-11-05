@@ -121,7 +121,9 @@ editor. Customers choose one value for each configured attribute before adding
 the product to their cart. Stock remains shared at the product level, matching
 the store's one-of-a-kind inventory behavior. Apply
 `supabase/migrations/20261105152000_product_variants.sql` to add product options
-and preserve selections in carts and orders.
+and preserve selections in carts and orders. Apply
+`supabase/migrations/20261105170000_pending_payment_cooldown.sql` to reserve
+GCash/Maya orders for two minutes and automatically release unpaid items.
 
 ### Direct database access and login protection
 

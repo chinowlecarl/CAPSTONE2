@@ -61,6 +61,9 @@ module.exports = function registerPaymentRoutes(
         .json({ error: "A valid payment proof image is required" });
 
     try {
+      const { error: expiryError } = await supabase.rpc("expire_unpaid_orders");
+      if (expiryError) throw expiryError;
+
       const { data: order, error: findErr } = await supabase
         .from("orders")
         .select("id, user_id, status, payment_status")
