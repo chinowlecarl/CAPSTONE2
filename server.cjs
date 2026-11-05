@@ -204,10 +204,10 @@ app.put("/api/me", auth, async (req, res) => {
 
 const SOLD_PRODUCT_RETENTION_MS = 72 * 60 * 60 * 1000;
 const PUBLIC_PRODUCT_FIELDS = "id,title,description,price,discount,category,stock,featured,created_at";
-const isProductImageProxyUrl = (imageUrl, productId) => {
+const isProductImageProxyUrl = (imageUrl) => {
   if (typeof imageUrl !== "string") return false;
   try {
-    return new URL(imageUrl).pathname === `/api/products/${encodeURIComponent(productId)}/image`;
+    return /^\/api\/products\/[^/]+\/image$/.test(new URL(imageUrl).pathname);
   } catch {
     return false;
   }
@@ -324,7 +324,8 @@ app.get("/api/products/:id/image-source", auth, adminOnly, async (req, res) => {
       .select("image_url").eq("id", req.params.id).maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: "Product not found" });
-    res.json({ image_url: data.image_url || "" });
+    const imageUrl = data.image_url || "";
+    res.json({ image_url: isProductImageProxyUrl(imageUrl) ? "" : imageUrl });
   } catch (err) {
     console.error(`[PRODUCT IMAGE SOURCE ERROR] ${err.message}`);
     res.status(500).json({ error: "Failed to fetch product image" });
@@ -343,7 +344,7 @@ app.get("/api/products/:id/image", async (req, res) => {
     res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
     if (match) return res.type(match[1]).send(Buffer.from(match[2], "base64"));
 
-    if (isProductImageProxyUrl(data?.image_url, req.params.id)) return res.status(404).end();
+    if (isProductImageProxyUrl(data?.image_url)) return res.status(404).end();
 
     if (typeof data?.image_url === "string") {
       try {
@@ -373,6 +374,9 @@ app.post("/api/products", auth, adminOnly, async (req, res) => {
   title       = sanitize(title);
   category    = sanitize(category);
   description = sanitize(description);
+  if (isProductImageProxyUrl(image_url)) {
+    return res.status(400).json({ error: "Upload the original product image instead of using an image proxy URL." });
+  }
   const stockQuantity = Number(stock);
   if (!title || !price || !category)
     return res.status(400).json({ error: "Title, price, category required" });
@@ -407,6 +411,9 @@ app.put("/api/products/:id", auth, adminOnly, async (req, res) => {
   title       = sanitize(title);
   category    = sanitize(category);
   description = sanitize(description);
+  if (isProductImageProxyUrl(image_url)) {
+    return res.status(400).json({ error: "Upload the original product image instead of using an image proxy URL." });
+  }
   const stockQuantity = Number(stock);
   if (stock === undefined || stock === null || String(stock).trim() === "" ||
     !Number.isInteger(stockQuantity) || ![0, 1].includes(stockQuantity))

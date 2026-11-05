@@ -1,7 +1,7 @@
 
 import { apiFetch } from "../utils/api";
 import { supabase } from "../utils/supabase";
-import { addProductToCart, createCartAddGuard, normalizeSingleItemCart } from "../utils/cart.mjs";
+import { createCartAddGuard, normalizeSingleItemCart } from "../utils/cart.mjs";
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 
 export const AppContext = createContext(null);
@@ -16,22 +16,11 @@ const isPasswordResetLocation = () => {
 };
 
 const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
-const GUEST_CART_STORAGE_KEY = "fitcheque:guest-cart";
-
-const loadGuestCart = () => {
-  try {
-    const stored = JSON.parse(localStorage.getItem(GUEST_CART_STORAGE_KEY) || "[]");
-    return Array.isArray(stored) ? normalizeSingleItemCart(stored) : [];
-  } catch {
-    return [];
-  }
-};
-
-export function AppProvider({ children }) {
+export function AppProvider({ children, onRequireLogin }) {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [passwordRecoveryReady, setPasswordRecoveryReady] = useState(false);
-  const [cart, setCart] = useState(loadGuestCart);
+  const [cart, setCart] = useState([]);
   const [addingProducts, setAddingProducts] = useState({});
   const cartRef = useRef(cart);
   const cartRevisionRef = useRef(0);
@@ -59,13 +48,7 @@ export function AppProvider({ children }) {
     cartRef.current = cart;
     if (!user) {
       try {
-        localStorage.setItem(GUEST_CART_STORAGE_KEY, JSON.stringify(cart));
-      } catch (error) {
-        console.warn("Could not save the guest cart:", error.message);
-      }
-    } else {
-      try {
-        localStorage.removeItem(GUEST_CART_STORAGE_KEY);
+        localStorage.removeItem("fitcheque:guest-cart");
       } catch (error) {
         console.warn("Could not clear the saved guest cart:", error.message);
       }
@@ -467,43 +450,43 @@ export function AppProvider({ children }) {
   // ── CART (unchanged — still via Express) ───────────────────
 
   const addToCart = async (product) => {
+    if (authLoading) {
+      toast("Please wait while we check your sign-in status.", "info");
+      return false;
+    }
+    if (!user) {
+      toast("Please sign in to add items to your cart.", "error");
+      onRequireLogin?.();
+      return false;
+    }
+
     const productId = String(product.id);
     if (!addToCartGuardRef.current.tryStart(productId)) return false;
     setAddingProducts((current) => ({ ...current, [productId]: true }));
     try {
-      if (user) {
-        const result = await apiFetch("/cart", {
-          method: "POST",
-          body: JSON.stringify({ product_id: product.id, quantity: 1 }),
-        });
-        const currentCart = cartRef.current;
-        const index = currentCart.findIndex(
-          (item) => String(item.product_id) === String(product.id)
-        );
-        const item = {
-          ...result.item,
-          quantity: Math.max(
-            Number(result.item.quantity) || 0,
-            Number(currentCart[index]?.quantity) || 0
-          ),
-          products: product,
-        };
-        const updated = index === -1
-          ? [...currentCart, item]
-          : currentCart.map((current, currentIndex) =>
-              currentIndex === index ? item : current
-            );
-        replaceCart(updated);
-        toast(`${product.title} added to cart! 🛍`, "success");
-      } else {
-        const result = addProductToCart(cartRef.current, product);
-        if (!result.added) {
-          toast(result.error, "error");
-          return false;
-        }
-        replaceCart(result.cart);
-        toast(`${product.title} added to cart! 🛍`, "success");
-      }
+      const result = await apiFetch("/cart", {
+        method: "POST",
+        body: JSON.stringify({ product_id: product.id, quantity: 1 }),
+      });
+      const currentCart = cartRef.current;
+      const index = currentCart.findIndex(
+        (item) => String(item.product_id) === String(product.id)
+      );
+      const item = {
+        ...result.item,
+        quantity: Math.max(
+          Number(result.item.quantity) || 0,
+          Number(currentCart[index]?.quantity) || 0
+        ),
+        products: product,
+      };
+      const updated = index === -1
+        ? [...currentCart, item]
+        : currentCart.map((current, currentIndex) =>
+            currentIndex === index ? item : current
+          );
+      replaceCart(updated);
+      toast(`${product.title} added to cart! 🛍`, "success");
       return true;
     } catch (err) {
       toast(err.message || "Failed to add to cart", "error");
