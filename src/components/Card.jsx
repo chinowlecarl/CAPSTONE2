@@ -6,6 +6,7 @@ import {
   normalizeVariantSelection,
   VARIANT_ATTRIBUTES,
 } from "../utils/productVariants.mjs";
+import { getProductAvailability } from "../utils/productAvailability.mjs";
 
 // Collect all available images for a product.
 // Supports: product.images (array) OR falls back to product.image_url (string)
@@ -153,7 +154,7 @@ function arrowStyle(side) {
 }
 
 // ── Product Detail Modal ──────────────────────────────────────────────────────
-function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
+function ProductModal({ product, onClose, onAddToCart, addingToCart, now }) {
   const images = getImages(product);
   const [idx, setIdx] = useState(0);
   const [variantSelection, setVariantSelection] = useState({});
@@ -161,7 +162,8 @@ function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
   const variantAttributes = VARIANT_ATTRIBUTES.filter(({ key }) => variantOptions[key]);
   const selectedVariants = normalizeVariantSelection(variantOptions, variantSelection);
   const sp = salePrice(product.price, product.discount);
-  const soldOut = !Number.isInteger(Number(product.stock)) || Number(product.stock) <= 0;
+  const { available, paymentPending } = getProductAvailability(product, now);
+  const soldOut = !available && !paymentPending;
 
   // Close on backdrop click
   const onBackdrop = (e) => { if (e.target === e.currentTarget) onClose(); };
@@ -340,12 +342,17 @@ function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
             <div>
               <span style={{
                 padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700,
-                background: soldOut ? "#fff5f5" : "#f0fdf4",
-                color: soldOut ? "#ef4444" : "#22c55e",
-                border: `1px solid ${soldOut ? "#fecaca" : "#bbf7d0"}`,
+                background: paymentPending ? "#fff7ed" : soldOut ? "#fff5f5" : "#f0fdf4",
+                color: paymentPending ? "#c2410c" : soldOut ? "#ef4444" : "#22c55e",
+                border: `1px solid ${paymentPending ? "#fed7aa" : soldOut ? "#fecaca" : "#bbf7d0"}`,
               }}>
-                {soldOut ? "Sold" : "One of a kind"}
+                {paymentPending ? "Payment in progress" : soldOut ? "Sold" : "One of a kind"}
               </span>
+              {paymentPending && (
+                <p style={{ color: "#9a3412", fontSize: 12, lineHeight: 1.5, margin: "10px 0 0" }}>
+                  Someone is completing payment for this item. If they don’t finish within 2 minutes, it will become available again.
+                </p>
+              )}
             </div>
 
             {/* Add to cart */}
@@ -353,16 +360,16 @@ function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
               onClick={async () => {
                 if (await onAddToCart(product, selectedVariants)) onClose();
               }}
-              disabled={soldOut || addingToCart || selectedVariants === null}
+              disabled={soldOut || paymentPending || addingToCart || selectedVariants === null}
               style={{
-                background: soldOut || addingToCart || selectedVariants === null ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
-                border: "none", borderRadius: 12, color: soldOut || addingToCart || selectedVariants === null ? "#9ca3af" : "#fff",
+                background: soldOut || paymentPending || addingToCart || selectedVariants === null ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
+                border: "none", borderRadius: 12, color: soldOut || paymentPending || addingToCart || selectedVariants === null ? "#9ca3af" : "#fff",
                 fontWeight: 800, fontSize: 14, letterSpacing: 1, padding: "14px 0",
-                cursor: soldOut || addingToCart || selectedVariants === null ? "not-allowed" : "pointer",
+                cursor: soldOut || paymentPending || addingToCart || selectedVariants === null ? "not-allowed" : "pointer",
                 marginTop: "auto",
               }}
             >
-              {soldOut ? "SOLD" : addingToCart ? "ADDING..." : selectedVariants === null ? "SELECT OPTIONS" : "ADD TO CART"}
+              {paymentPending ? "PAYMENT IN PROGRESS" : soldOut ? "SOLD" : addingToCart ? "ADDING..." : selectedVariants === null ? "SELECT OPTIONS" : "ADD TO CART"}
             </button>
           </div>
         </div>
@@ -375,11 +382,26 @@ function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
 export function Card({ product, compact = false }) {
   const { addToCart, addingProducts } = useApp();
   const [showModal, setShowModal] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const sp = salePrice(product.price, product.discount);
   const images = getImages(product);
   const hasVariants = Object.keys(normalizeVariantOptions(product.variants)).length > 0;
-  const soldOut = !Number.isInteger(Number(product.stock)) || Number(product.stock) <= 0;
+  const { available, paymentPending } = getProductAvailability(product, now);
+  const soldOut = !available && !paymentPending;
   const addingToCart = Boolean(addingProducts[String(product.id)]);
+
+  useEffect(() => {
+    if (!product.reserved_until) return undefined;
+    const expiresAt = Date.parse(product.reserved_until);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return undefined;
+
+    const timer = window.setInterval(() => {
+      const currentTime = Date.now();
+      setNow(currentTime);
+      if (currentTime >= expiresAt) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [product.reserved_until]);
 
   return (
     <>
@@ -389,6 +411,7 @@ export function Card({ product, compact = false }) {
           onClose={() => setShowModal(false)}
           onAddToCart={addToCart}
           addingToCart={addingToCart}
+          now={now}
         />
       )}
     <div
@@ -487,17 +510,17 @@ export function Card({ product, compact = false }) {
             if (hasVariants) setShowModal(true);
             else addToCart(product, {});
           }}
-          disabled={soldOut || addingToCart}
+          disabled={soldOut || paymentPending || addingToCart}
           style={{
             width: "100%",
-            background: soldOut || addingToCart ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
-            border: "none", borderRadius: 8, color: soldOut || addingToCart ? "#9ca3af" : "#fff",
+            background: soldOut || paymentPending || addingToCart ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
+            border: "none", borderRadius: 8, color: soldOut || paymentPending || addingToCart ? "#9ca3af" : "#fff",
             fontWeight: 700, fontSize: compact ? 10 : 12, letterSpacing: 0.8,
             padding: compact ? "7px 0" : "10px 0",
-            cursor: soldOut || addingToCart ? "not-allowed" : "pointer",
+            cursor: soldOut || paymentPending || addingToCart ? "not-allowed" : "pointer",
           }}
         >
-          {soldOut ? "SOLD" : addingToCart ? "ADDING..." : hasVariants ? "CHOOSE OPTIONS" : "ADD TO CART"}
+          {paymentPending ? "PAYMENT IN PROGRESS" : soldOut ? "SOLD" : addingToCart ? "ADDING..." : hasVariants ? "CHOOSE OPTIONS" : "ADD TO CART"}
         </button>
       </div>
     </div>

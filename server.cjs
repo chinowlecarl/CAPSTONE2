@@ -203,7 +203,7 @@ app.put("/api/me", auth, async (req, res) => {
 // ============================================================
 
 const SOLD_PRODUCT_RETENTION_MS = 72 * 60 * 60 * 1000;
-const PUBLIC_PRODUCT_FIELDS = "id,title,description,price,discount,category,stock,featured,created_at,variants";
+const PUBLIC_PRODUCT_FIELDS = "id,title,description,price,discount,category,stock,featured,created_at,variants,reserved_until";
 const PRODUCT_VARIANT_KEYS = ["size", "color", "style"];
 const isProductImageProxyUrl = (imageUrl) => {
   if (typeof imageUrl !== "string") return false;
@@ -250,6 +250,10 @@ const normalizeVariantSelection = (selection) => {
     return [key, value.trim()];
   }));
 };
+const expireUnpaidOrders = async () => {
+  const { error } = await supabase.rpc("expire_unpaid_orders");
+  if (error) throw error;
+};
 const productImageUrl = (req, product) => ({
   ...product,
   image_url: `${req.protocol}://${req.get("host")}/api/products/${encodeURIComponent(product.id)}/image`,
@@ -272,6 +276,7 @@ const filterActiveProducts = (query, search = "") => {
 app.get("/api/products", async (req, res) => {
   const { category, search } = req.query;
   try {
+    await expireUnpaidOrders();
     const isPaginated = req.query.limit !== undefined || req.query.offset !== undefined;
     const limit = isPaginated ? Number(req.query.limit ?? 24) : null;
     const offset = isPaginated ? Number(req.query.offset ?? 0) : 0;
@@ -299,6 +304,7 @@ app.get("/api/products", async (req, res) => {
 
 app.get("/api/products/featured", async (req, res) => {
   try {
+    await expireUnpaidOrders();
     const { data, error } = await filterActiveProducts(supabase.from("products").select(PUBLIC_PRODUCT_FIELDS))
       .eq("featured", true)
       .order("created_at", { ascending: false }).limit(8);
@@ -320,6 +326,7 @@ app.get("/api/products/featured", async (req, res) => {
 
 app.get("/api/products/home", async (req, res) => {
   try {
+    await expireUnpaidOrders();
     const productsQuery = () => filterActiveProducts(
       supabase.from("products").select(PUBLIC_PRODUCT_FIELDS),
     ).gt("stock", 0).order("created_at", { ascending: false }).order("id", { ascending: true }).limit(8);
@@ -400,6 +407,7 @@ app.get("/api/products/:id/image", async (req, res) => {
 
 app.get("/api/products/:id", async (req, res) => {
   try {
+    await expireUnpaidOrders();
     const { data, error } = await filterActiveProducts(supabase.from("products").select("*"))
       .eq("id", req.params.id).single();
     if (error || !data) return res.status(404).json({ error: "Product not found" });
@@ -519,6 +527,7 @@ app.post("/api/cart", auth, async (req, res) => {
     return res.status(400).json({ error: "Each unique product can only be added once" });
   }
   try {
+    await expireUnpaidOrders();
     const { data, error } = await supabase.rpc("add_cart_item", {
       p_user_id: req.user.id,
       p_product_id: product_id,
@@ -633,6 +642,7 @@ app.put("/api/orders/:id/checkout", auth, async (req, res) => {
   }
 
   try {
+    await expireUnpaidOrders();
     const { data: order, error } = await supabase.from("orders")
       .update({
         shipping_address: sanitize(shipping_address) || "",
