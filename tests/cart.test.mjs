@@ -6,6 +6,10 @@ import {
   calculateCartTotals,
   normalizeSingleItemCart,
 } from "../src/utils/cart.mjs";
+import {
+  normalizeVariantOptions,
+  normalizeVariantSelection,
+} from "../src/utils/productVariants.mjs";
 
 test("a one-of-a-kind product can only be added once", () => {
   const product = { id: "dress-1", title: "Floral Dress", stock: 1 };
@@ -52,4 +56,27 @@ test("cart totals count each garment once", () => {
     tax: 36,
     total: 416,
   });
+});
+
+test("variant options are trimmed and de-duplicated", () => {
+  assert.deepEqual(normalizeVariantOptions({
+    size: [" Small ", "Small", "Medium", ""],
+    color: "Blue, Black",
+    unsupported: ["ignored"],
+  }), {
+    size: ["Small", "Medium"],
+    color: ["Blue", "Black"],
+  });
+});
+
+test("variant selection requires one valid choice for every configured attribute", () => {
+  const variants = { size: ["Small", "Large"], color: ["Blue"] };
+
+  assert.equal(normalizeVariantSelection(variants, { size: "Small" }), null);
+  assert.equal(normalizeVariantSelection(variants, { size: "Small", color: "Red" }), null);
+  assert.deepEqual(normalizeVariantSelection(variants, { size: "Large", color: "Blue" }), {
+    size: "Large",
+    color: "Blue",
+  });
+  assert.deepEqual(normalizeVariantSelection({}, {}), {});
 });

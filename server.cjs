@@ -203,7 +203,8 @@ app.put("/api/me", auth, async (req, res) => {
 // ============================================================
 
 const SOLD_PRODUCT_RETENTION_MS = 72 * 60 * 60 * 1000;
-const PUBLIC_PRODUCT_FIELDS = "id,title,description,price,discount,category,stock,featured,created_at";
+const PUBLIC_PRODUCT_FIELDS = "id,title,description,price,discount,category,stock,featured,created_at,variants";
+const PRODUCT_VARIANT_KEYS = ["size", "color", "style"];
 const isProductImageProxyUrl = (imageUrl) => {
   if (typeof imageUrl !== "string") return false;
   try {
@@ -211,6 +212,43 @@ const isProductImageProxyUrl = (imageUrl) => {
   } catch {
     return false;
   }
+};
+const normalizeProductVariants = (variants) => {
+  if (variants === undefined || variants === null) return {};
+  if (typeof variants !== "object" || Array.isArray(variants)) {
+    throw new Error("Product variants must be an object.");
+  }
+  if (Object.keys(variants).some((key) => !PRODUCT_VARIANT_KEYS.includes(key))) {
+    throw new Error("Only size, color, and style variants are supported.");
+  }
+
+  return Object.fromEntries(PRODUCT_VARIANT_KEYS.flatMap((key) => {
+    const options = variants[key];
+    if (options === undefined) return [];
+    if (!Array.isArray(options) || options.some((option) => typeof option !== "string")) {
+      throw new Error(`The ${key} variants must be a list of options.`);
+    }
+    const normalized = [...new Set(options.map((option) => option.trim()).filter(Boolean))];
+    if (normalized.length > 25 || normalized.some((option) => option.length > 40)) {
+      throw new Error(`The ${key} variants allow up to 25 options of 40 characters each.`);
+    }
+    return normalized.length ? [[key, normalized]] : [];
+  }));
+};
+const normalizeVariantSelection = (selection) => {
+  if (selection === undefined || selection === null) return {};
+  if (typeof selection !== "object" || Array.isArray(selection)) {
+    throw new Error("Variant selection must be an object.");
+  }
+  if (Object.keys(selection).some((key) => !PRODUCT_VARIANT_KEYS.includes(key))) {
+    throw new Error("Only size, color, and style variants are supported.");
+  }
+  return Object.fromEntries(Object.entries(selection).map(([key, value]) => {
+    if (typeof value !== "string" || !value.trim() || value.length > 40) {
+      throw new Error(`Choose a valid ${key} option.`);
+    }
+    return [key, value.trim()];
+  }));
 };
 const productImageUrl = (req, product) => ({
   ...product,
@@ -377,6 +415,12 @@ app.post("/api/products", auth, adminOnly, async (req, res) => {
   if (isProductImageProxyUrl(image_url)) {
     return res.status(400).json({ error: "Upload the original product image instead of using an image proxy URL." });
   }
+  let variants;
+  try {
+    variants = normalizeProductVariants(req.body.variants);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
   const stockQuantity = Number(stock);
   if (!title || !price || !category)
     return res.status(400).json({ error: "Title, price, category required" });
@@ -390,7 +434,7 @@ app.post("/api/products", auth, adminOnly, async (req, res) => {
       .insert([{
         title, description, price: +price,
         discount: +discount || 0, category, image_url,
-        stock: stockQuantity, featured: !!featured
+        stock: stockQuantity, featured: !!featured, variants
       }]).select().single();
     if (error) {
       console.error(`[ADD PRODUCT ERROR] Supabase: ${error.message} | code: ${error.code} | details: ${error.details}`);
@@ -414,13 +458,25 @@ app.put("/api/products/:id", auth, adminOnly, async (req, res) => {
   if (isProductImageProxyUrl(image_url)) {
     return res.status(400).json({ error: "Upload the original product image instead of using an image proxy URL." });
   }
+  let variants;
+  if (Object.hasOwn(req.body, "variants")) {
+    try {
+      variants = normalizeProductVariants(req.body.variants);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+  }
   const stockQuantity = Number(stock);
   if (stock === undefined || stock === null || String(stock).trim() === "" ||
     !Number.isInteger(stockQuantity) || ![0, 1].includes(stockQuantity))
     return res.status(400).json({ error: "A unique product must be either available (1) or sold (0)" });
   try {
     const { data, error } = await supabase.from("products")
-      .update({ title, description, price: +price, discount: +discount, category, image_url, stock: stockQuantity, featured: !!featured })
+      .update({
+        title, description, price: +price, discount: +discount, category,
+        image_url, stock: stockQuantity, featured: !!featured,
+        ...(variants === undefined ? {} : { variants }),
+      })
       .eq("id", req.params.id).select().single();
     if (error) {
       console.error(`[UPDATE PRODUCT ERROR] Supabase: ${error.message} | code: ${error.code} | details: ${error.details}`);
@@ -452,6 +508,12 @@ app.get("/api/cart", auth, async (req, res) => {
 app.post("/api/cart", auth, async (req, res) => {
   const { product_id, quantity } = req.body;
   if (!product_id) return res.status(400).json({ error: "Product ID required" });
+  let variantSelection;
+  try {
+    variantSelection = normalizeVariantSelection(req.body.variant_selection);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
   const requestedQuantity = Number(quantity ?? 1);
   if (requestedQuantity !== 1) {
     return res.status(400).json({ error: "Each unique product can only be added once" });
@@ -461,11 +523,13 @@ app.post("/api/cart", auth, async (req, res) => {
       p_user_id: req.user.id,
       p_product_id: product_id,
       p_quantity: requestedQuantity,
+      p_variant_selection: variantSelection,
     });
     if (error) {
       if (error.code === "P1001") return res.status(404).json({ error: error.message });
       if (error.code === "P1002") return res.status(409).json({ error: error.message });
       if (error.code === "P1003") return res.status(400).json({ error: error.message });
+      if (error.code === "P1004") return res.status(400).json({ error: error.message });
       throw error;
     }
     res.json({ message: "Cart updated!", item: data });
@@ -540,7 +604,7 @@ app.get("/api/orders/:id/items", auth, async (req, res) => {
     if (!order) return res.status(404).json({ error: "Order not found" });
 
     const { data, error } = await supabase.from("order_items")
-      .select("id,quantity,unit_price,products(id,title,price,discount,image_url)")
+      .select("id,quantity,unit_price,variant_selection,products(id,title,price,discount,image_url)")
       .eq("order_id", order.id);
     if (error) throw error;
     res.json(data.map((item) => ({
@@ -626,6 +690,7 @@ app.post("/api/orders", auth, async (req, res) => {
       if (error.code === "P3001") return res.status(409).json({ error: error.message });
       if (error.code === "P3002") return res.status(400).json({ error: error.message });
       if (error.code === "P3003") return res.status(400).json({ error: error.message });
+      if (error.code === "P3004") return res.status(409).json({ error: error.message });
       throw error;
     }
     console.log(`[ORDER] ${new Date().toISOString()} - Order placed by user: ${req.user.id}`);

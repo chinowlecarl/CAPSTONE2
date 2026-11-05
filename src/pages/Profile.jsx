@@ -4,6 +4,7 @@ import { apiFetch, fmt, salePrice } from "../utils/api";
 import { supabase } from "../utils/supabase";
 import ChangePassword from "./ChangePassword";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { formatVariantSelection } from "../utils/productVariants.mjs";
 
 const STATUS_STYLES = {
   pending:   { bg: "#fef9c3", color: "#854d0e", label: "Pending" },
@@ -159,6 +160,11 @@ function OrderCard({ order, onCancel, cancelling, loadItems }) {
                       Qty: <strong style={{ color: "#555" }}>{item.quantity}</strong>
                       &nbsp;·&nbsp;{fmt(price)} each
                     </p>
+                    {formatVariantSelection(item.variant_selection) && (
+                      <p style={{ fontSize: 11, color: "#777", margin: "3px 0 0" }}>
+                        {formatVariantSelection(item.variant_selection)}
+                      </p>
+                    )}
                   </div>
                   <span style={{ fontSize: 14, fontWeight: 900, color: "#be185d", flexShrink: 0 }}>
                     {fmt(price * item.quantity)}

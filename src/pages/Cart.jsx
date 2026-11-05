@@ -1,6 +1,7 @@
 import { useApp } from "../context/AppContext";
 import { fmt, salePrice } from "../utils/api";
 import { calculateCartTotals } from "../utils/cart.mjs";
+import { formatVariantSelection } from "../utils/productVariants.mjs";
 
 export default function Cart({ setPage }) {
   const { cart, removeFromCart, user } = useApp();
@@ -44,6 +45,11 @@ export default function Cart({ setPage }) {
                     <div style={{ flex: 1 }}>
                       <p style={{ color: "#db2777", fontSize: 10, fontWeight: 700, letterSpacing: 1, margin: "0 0 3px", textTransform: "uppercase" }}>{getCat(item)}</p>
                       <h4 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700, color: "#1a1a1a", fontFamily: "'Playfair Display', serif" }}>{getName(item)}</h4>
+                      {formatVariantSelection(item.variant_selection) && (
+                        <p style={{ margin: "0 0 6px", color: "#777", fontSize: 12 }}>
+                          {formatVariantSelection(item.variant_selection)}
+                        </p>
+                      )}
                       {soldOut && (
                         <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: "#ef4444" }}>
                           ⚠ No longer available — please remove

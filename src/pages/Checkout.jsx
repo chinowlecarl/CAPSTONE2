@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import { fmt, salePrice, apiFetch } from "../utils/api";
 import { calculateCartTotals } from "../utils/cart.mjs";
 import { getCheckoutOrderRequest, getPostCheckoutStep } from "../utils/checkout.mjs";
+import { formatVariantSelection } from "../utils/productVariants.mjs";
 import DeliveryLocationPicker from "../components/DeliveryLocationPicker";
 
 const PAYMENT_METHODS = [
@@ -601,6 +602,11 @@ export default function Checkout({ setPage }) {
                     onError={(e) => (e.target.src = "https://placehold.co/48/fce7f3/be185d?text=?")} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 12, fontWeight: 700, color: "#1a1a1a", margin: "0 0 2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{getName(item)}</p>
+                    {formatVariantSelection(item.variant_selection) && (
+                      <p style={{ fontSize: 11, color: "#777", margin: 0 }}>
+                        {formatVariantSelection(item.variant_selection)}
+                      </p>
+                    )}
                   </div>
                   <span style={{ fontSize: 13, fontWeight: 800, color: "#be185d", flexShrink: 0 }}>{fmt(getPrice(item))}</span>
                 </div>

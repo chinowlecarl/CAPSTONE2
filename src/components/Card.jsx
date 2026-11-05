@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { fmt, salePrice } from "../utils/api";
+import {
+  normalizeVariantOptions,
+  normalizeVariantSelection,
+  VARIANT_ATTRIBUTES,
+} from "../utils/productVariants.mjs";
 
 // Collect all available images for a product.
 // Supports: product.images (array) OR falls back to product.image_url (string)
@@ -151,6 +156,10 @@ function arrowStyle(side) {
 function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
   const images = getImages(product);
   const [idx, setIdx] = useState(0);
+  const [variantSelection, setVariantSelection] = useState({});
+  const variantOptions = normalizeVariantOptions(product.variants);
+  const variantAttributes = VARIANT_ATTRIBUTES.filter(({ key }) => variantOptions[key]);
+  const selectedVariants = normalizeVariantSelection(variantOptions, variantSelection);
   const sp = salePrice(product.price, product.discount);
   const soldOut = !Number.isInteger(Number(product.stock)) || Number(product.stock) <= 0;
 
@@ -300,6 +309,33 @@ function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
               {product.description || "No description available."}
             </p>
 
+            {variantAttributes.length > 0 && (
+              <div style={{ display: "grid", gap: 12 }}>
+                {variantAttributes.map(({ key, label }) => (
+                  <label key={key} style={{ display: "grid", gap: 6, color: "#555", fontSize: 12, fontWeight: 700 }}>
+                    {label}
+                    <select
+                      required
+                      value={variantSelection[key] || ""}
+                      onChange={(event) => setVariantSelection((current) => ({
+                        ...current,
+                        [key]: event.target.value,
+                      }))}
+                      style={{
+                        width: "100%", padding: "10px 12px", border: "1.5px solid #fce7f3",
+                        borderRadius: 10, background: "#fff5f7", color: "#333", fontSize: 13,
+                      }}
+                    >
+                      <option value="">Select {label.toLowerCase()}</option>
+                      {variantOptions[key].map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            )}
+
             {/* Stock badge */}
             <div>
               <span style={{
@@ -315,18 +351,18 @@ function ProductModal({ product, onClose, onAddToCart, addingToCart }) {
             {/* Add to cart */}
             <button
               onClick={async () => {
-                if (await onAddToCart(product)) onClose();
+                if (await onAddToCart(product, selectedVariants)) onClose();
               }}
-              disabled={soldOut || addingToCart}
+              disabled={soldOut || addingToCart || selectedVariants === null}
               style={{
-                background: soldOut || addingToCart ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
-                border: "none", borderRadius: 12, color: soldOut || addingToCart ? "#9ca3af" : "#fff",
+                background: soldOut || addingToCart || selectedVariants === null ? "#e5e7eb" : "linear-gradient(135deg, #f9a8d4 0%, #be185d 100%)",
+                border: "none", borderRadius: 12, color: soldOut || addingToCart || selectedVariants === null ? "#9ca3af" : "#fff",
                 fontWeight: 800, fontSize: 14, letterSpacing: 1, padding: "14px 0",
-                cursor: soldOut || addingToCart ? "not-allowed" : "pointer",
+                cursor: soldOut || addingToCart || selectedVariants === null ? "not-allowed" : "pointer",
                 marginTop: "auto",
               }}
             >
-              {soldOut ? "SOLD" : addingToCart ? "ADDING..." : "ADD TO CART"}
+              {soldOut ? "SOLD" : addingToCart ? "ADDING..." : selectedVariants === null ? "SELECT OPTIONS" : "ADD TO CART"}
             </button>
           </div>
         </div>
@@ -341,6 +377,7 @@ export function Card({ product, compact = false }) {
   const [showModal, setShowModal] = useState(false);
   const sp = salePrice(product.price, product.discount);
   const images = getImages(product);
+  const hasVariants = Object.keys(normalizeVariantOptions(product.variants)).length > 0;
   const soldOut = !Number.isInteger(Number(product.stock)) || Number(product.stock) <= 0;
   const addingToCart = Boolean(addingProducts[String(product.id)]);
 
@@ -446,7 +483,9 @@ export function Card({ product, compact = false }) {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            if (!soldOut) addToCart(product);
+            if (soldOut) return;
+            if (hasVariants) setShowModal(true);
+            else addToCart(product, {});
           }}
           disabled={soldOut || addingToCart}
           style={{
@@ -458,7 +497,7 @@ export function Card({ product, compact = false }) {
             cursor: soldOut || addingToCart ? "not-allowed" : "pointer",
           }}
         >
-          {soldOut ? "SOLD" : addingToCart ? "ADDING..." : "ADD TO CART"}
+          {soldOut ? "SOLD" : addingToCart ? "ADDING..." : hasVariants ? "CHOOSE OPTIONS" : "ADD TO CART"}
         </button>
       </div>
     </div>
