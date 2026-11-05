@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../../utils/api";
+import { formatVariantSelection } from "../../utils/productVariants.mjs";
 import { useApp } from "../../context/AppContext";
 import CustomerName from "../../components/CustomerName";
 
@@ -129,7 +130,27 @@ export default function ManageEvents({ setPage }) {
                         {order.users?.username && <div style={{ fontSize: 11, color: order.users.status === "suspended" ? "#dc2626" : "#666", fontWeight: order.users.status === "suspended" ? 800 : 500 }}>@{order.users.username}</div>}
                         <div style={{ fontSize: 11, color: "#bbb" }}>{order.users?.email || ""}</div>
                       </td>
-                      <td style={{ padding: "12px 14px", color: "#555" }}>{order.order_items?.length || 0} item{order.order_items?.length !== 1 ? "s" : ""}</td>
+                      <td style={{ padding: "12px 14px", color: "#555" }}>
+                        {order.order_items?.length ? (
+                          <details>
+                            <summary style={{ cursor: "pointer" }}>
+                              {order.order_items.length} item{order.order_items.length !== 1 ? "s" : ""}
+                            </summary>
+                            <div style={{ paddingTop: 6, fontSize: 11 }}>
+                              {order.order_items.map((item) => (
+                                <div key={item.id} style={{ marginTop: 4 }}>
+                                  {item.products?.title || "Product"}
+                                  {formatVariantSelection(item.variant_selection) && (
+                                    <div style={{ color: "#888" }}>
+                                      {formatVariantSelection(item.variant_selection)}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        ) : "0 items"}
+                      </td>
                       <td style={{ padding: "12px 14px", fontWeight: 800, color: "#be185d" }}>₱{Number(order.total_amount).toFixed(2)}</td>
                       <td style={{ padding: "12px 14px", color: "#888", fontSize: 12 }}>{new Date(order.created_at).toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"})}</td>
                       <td style={{ padding: "12px 14px" }}>

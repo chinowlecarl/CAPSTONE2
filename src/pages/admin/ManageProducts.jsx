@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { apiFetch, fmt, salePrice } from "../../utils/api";
+import { normalizeVariantOptions, VARIANT_ATTRIBUTES } from "../../utils/productVariants.mjs";
 import { useApp } from "../../context/AppContext";
 import ConfirmDialog from "../../components/ConfirmDialog";
 
@@ -172,6 +173,7 @@ export default function ManageProducts({ setPage }) {
     title:"", description:"", price:"", discount:"0", category:"", stock:"1",
     featured:false, image_url:"",
     extra_images: ["", "", ""],
+    variants: { size:"", color:"", style:"" },
   });
 
   const sf = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
@@ -198,7 +200,7 @@ export default function ManageProducts({ setPage }) {
   }, [user?.id]);
 
   const openAdd = () => {
-    setForm({ title:"", description:"", price:"", discount:"0", category:"", stock:"1", featured:false, image_url:"", extra_images:["","",""] });
+    setForm({ title:"", description:"", price:"", discount:"0", category:"", stock:"1", featured:false, image_url:"", extra_images:["","",""], variants:{ size:"", color:"", style:"" } });
     setEditP(null); setModal(true);
   };
   const openEdit = async (p) => {
@@ -209,7 +211,15 @@ export default function ManageProducts({ setPage }) {
         (p.images && p.images[2]) || "",
         (p.images && p.images[3]) || "",
       ];
-      setForm({ title:p.title, description:p.description||"", price:p.price, discount:p.discount, category:p.category, stock:Number(p.stock) > 0 ? "1" : "0", featured:!!p.featured, image_url:image_url||"", extra_images:ei });
+      const variantOptions = normalizeVariantOptions(p.variants);
+      setForm({
+        title:p.title, description:p.description||"", price:p.price, discount:p.discount,
+        category:p.category, stock:Number(p.stock) > 0 ? "1" : "0", featured:!!p.featured,
+        image_url:image_url||"", extra_images:ei,
+        variants: Object.fromEntries(VARIANT_ATTRIBUTES.map(({ key }) => [
+          key, (variantOptions[key] || []).join(", "),
+        ])),
+      });
       setEditP(p); setModal(true);
     } catch (err) {
       showMsg(err.message || "Could not load this product for editing.", "error");
@@ -234,6 +244,7 @@ export default function ManageProducts({ setPage }) {
         stock,
         featured: form.featured,
         image_url: form.image_url || form.extra_images.find(Boolean) || "",
+        variants: normalizeVariantOptions(form.variants),
       };
       if (editP) {
         const updated = await apiFetch(`/products/${editP.id}`, { method:"PUT", body:JSON.stringify(body) });
@@ -414,6 +425,31 @@ export default function ManageProducts({ setPage }) {
                   style={{ ...inputStyle, resize:"none" }}
                   onFocus={(e)=>(e.target.style.borderColor="#db2777")} onBlur={(e)=>(e.target.style.borderColor="#fce7f3")} />
               </div>
+
+              <fieldset style={{ border:"1px solid #fce7f3", borderRadius:10, padding:14, margin:0 }}>
+                <legend style={{ fontSize:10, fontWeight:800, color:"#be185d", letterSpacing:1.2, padding:"0 6px" }}>
+                  PRODUCT OPTIONS (OPTIONAL)
+                </legend>
+                <p style={{ color:"#888", fontSize:11, margin:"0 0 12px" }}>
+                  Enter comma-separated choices. Stock is shared by all options.
+                </p>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  {VARIANT_ATTRIBUTES.map(({ key, label }) => (
+                    <label key={key} style={{ fontSize:10, fontWeight:800, color:"#888", letterSpacing:1 }}>
+                      {label.toUpperCase()}
+                      <input
+                        value={form.variants[key]}
+                        onChange={(e) => setForm((current) => ({
+                          ...current,
+                          variants: { ...current.variants, [key]: e.target.value },
+                        }))}
+                        placeholder={key === "size" ? "S, M, L" : key === "color" ? "Black, Blue" : "Casual, Formal"}
+                        style={{ ...inputStyle, marginTop:6, fontWeight:400, letterSpacing:0 }}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
               <ImageSlot label="IMAGE — ANGLE 1 (MAIN) *" value={form.image_url} onChange={setImgUrl} inputStyle={inputStyle} />
               {form.extra_images.map((url, i) => (

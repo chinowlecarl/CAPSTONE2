@@ -5,7 +5,6 @@ const ManageProducts = lazy(() => import("./ManageProducts"));
 const ManageEvents = lazy(() => import("./ManageEvents"));
 const PaymentVerification = lazy(() => import("./PaymentVerification"));
 const CheckInDesk = lazy(() => import("./CheckInDesk"));
-const CreateEvent = lazy(() => import("./CreateEvent"));
 const EventDetails = lazy(() => import("./EventDetails"));
 const SalesInsights = lazy(() => import("./SalesInsights"));
 const CustomerBehavior = lazy(() => import("./CustomerBehavior"));
@@ -15,7 +14,6 @@ const ArchivedProducts = lazy(() => import("./ArchivedProducts"));
 const TABS = [
   { id: "products", label: "📦 Products",     icon: "📦" },
   { id: "archive",  label: "🗃 Archived",      icon: "🗃" },
-  { id: "add",      label: "➕ Add Product",  icon: "➕" },
   { id: "insights", label: "📈 Insights", icon: "📈" }, 
   { id: "behavior", label: "👥 Customer Behavior", icon: "👥" },
   { id: "payments", label: "💳 Payments",      icon: "💳" },
@@ -72,7 +70,6 @@ export default function AdminHome({ setPage }) {
         <Suspense fallback={<div role="status" style={{ padding: 48, textAlign: "center", color: "#be185d" }}>Loading admin screen...</div>}>
           {tab === "products" && <ManageProducts setPage={setPage} />}
           {tab === "archive"  && <ArchivedProducts />}
-          {tab === "add"      && <CreateEvent    setPage={setPage} />}
           {tab === "orders"   && <ManageEvents   setPage={setPage} />}
           {tab === "users"    && <EventDetails   setPage={setPage} />}
           {tab === "checkin"  && <CheckInDesk    setPage={setPage} />}

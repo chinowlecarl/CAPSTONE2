@@ -449,7 +449,7 @@ export function AppProvider({ children, onRequireLogin }) {
 
   // ── CART (unchanged — still via Express) ───────────────────
 
-  const addToCart = async (product) => {
+  const addToCart = async (product, variantSelection = {}) => {
     if (authLoading) {
       toast("Please wait while we check your sign-in status.", "info");
       return false;
@@ -466,7 +466,11 @@ export function AppProvider({ children, onRequireLogin }) {
     try {
       const result = await apiFetch("/cart", {
         method: "POST",
-        body: JSON.stringify({ product_id: product.id, quantity: 1 }),
+        body: JSON.stringify({
+          product_id: product.id,
+          quantity: 1,
+          variant_selection: variantSelection,
+        }),
       });
       const currentCart = cartRef.current;
       const index = currentCart.findIndex(

@@ -88,12 +88,14 @@ screen refresh every 30 seconds while open.
 Core data used by the app:
 
 - `profiles`: user name, username, phone, address, role, and account status.
-- `products`: catalog, price, discount, category, image, stock, and featured
-  state.
-- `cart_items`: a user's selected products and quantities.
+- `products`: catalog, price, discount, category, image, stock, featured state,
+  and optional size, color, and style choices.
+- `cart_items`: a user's selected products, quantities, and chosen variant
+  options.
 - `orders`: customer, total, shipping address, order/payment/delivery statuses,
   payment reference and proof path, and Lalamove order id.
-- `order_items`: products, quantities, and prices recorded for each order.
+- `order_items`: products, quantities, prices, and selected variant options
+  recorded for each order.
 - `categories`: admin-managed product categories.
 - `activity_logs`: recorded user and admin activity.
 - Storage bucket `payment-proofs`: private payment screenshots.
@@ -111,6 +113,15 @@ Common status values used by the app:
 
 The deployed schema must match the SQL migrations and setup files applied to the
 Supabase project.
+
+### Product variants
+
+Admins configure comma-separated size, color, and style options in the Products
+editor. Customers choose one value for each configured attribute before adding
+the product to their cart. Stock remains shared at the product level, matching
+the store's one-of-a-kind inventory behavior. Apply
+`supabase/migrations/20261105152000_product_variants.sql` to add product options
+and preserve selections in carts and orders.
 
 ### Direct database access and login protection
 
