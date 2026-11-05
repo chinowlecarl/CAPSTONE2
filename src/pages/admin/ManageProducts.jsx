@@ -201,14 +201,19 @@ export default function ManageProducts({ setPage }) {
     setForm({ title:"", description:"", price:"", discount:"0", category:"", stock:"1", featured:false, image_url:"", extra_images:["","",""] });
     setEditP(null); setModal(true);
   };
-  const openEdit = (p) => {
-    const ei = [
-      (p.images && p.images[1]) || "",
-      (p.images && p.images[2]) || "",
-      (p.images && p.images[3]) || "",
-    ];
-    setForm({ title:p.title, description:p.description||"", price:p.price, discount:p.discount, category:p.category, stock:Number(p.stock) > 0 ? "1" : "0", featured:!!p.featured, image_url:p.image_url||"", extra_images:ei });
-    setEditP(p); setModal(true);
+  const openEdit = async (p) => {
+    try {
+      const { image_url } = await apiFetch(`/products/${encodeURIComponent(p.id)}/image-source`);
+      const ei = [
+        (p.images && p.images[1]) || "",
+        (p.images && p.images[2]) || "",
+        (p.images && p.images[3]) || "",
+      ];
+      setForm({ title:p.title, description:p.description||"", price:p.price, discount:p.discount, category:p.category, stock:Number(p.stock) > 0 ? "1" : "0", featured:!!p.featured, image_url:image_url||"", extra_images:ei });
+      setEditP(p); setModal(true);
+    } catch (err) {
+      showMsg(err.message || "Could not load this product for editing.", "error");
+    }
   };
 
   const save = async () => {

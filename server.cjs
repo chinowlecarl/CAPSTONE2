@@ -204,6 +204,14 @@ app.put("/api/me", auth, async (req, res) => {
 
 const SOLD_PRODUCT_RETENTION_MS = 72 * 60 * 60 * 1000;
 const PUBLIC_PRODUCT_FIELDS = "id,title,description,price,discount,category,stock,featured,created_at";
+const isProductImageProxyUrl = (imageUrl, productId) => {
+  if (typeof imageUrl !== "string") return false;
+  try {
+    return new URL(imageUrl).pathname === `/api/products/${encodeURIComponent(productId)}/image`;
+  } catch {
+    return false;
+  }
+};
 const productImageUrl = (req, product) => ({
   ...product,
   image_url: `${req.protocol}://${req.get("host")}/api/products/${encodeURIComponent(product.id)}/image`,
@@ -310,6 +318,19 @@ app.get("/api/products/home", async (req, res) => {
   }
 });
 
+app.get("/api/products/:id/image-source", auth, adminOnly, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("products")
+      .select("image_url").eq("id", req.params.id).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Product not found" });
+    res.json({ image_url: data.image_url || "" });
+  } catch (err) {
+    console.error(`[PRODUCT IMAGE SOURCE ERROR] ${err.message}`);
+    res.status(500).json({ error: "Failed to fetch product image" });
+  }
+});
+
 app.get("/api/products/:id/image", async (req, res) => {
   try {
     const { data, error } = await supabase.from("products")
@@ -321,6 +342,8 @@ app.get("/api/products/:id/image", async (req, res) => {
       : null;
     res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
     if (match) return res.type(match[1]).send(Buffer.from(match[2], "base64"));
+
+    if (isProductImageProxyUrl(data?.image_url, req.params.id)) return res.status(404).end();
 
     if (typeof data?.image_url === "string") {
       try {
