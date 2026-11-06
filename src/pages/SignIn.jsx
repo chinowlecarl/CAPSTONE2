@@ -280,7 +280,7 @@ export default function SignIn({ setPage }) {
               aria-label={showPw ? "Hide password" : "Show password"}
               style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#db2777", padding: 0, display: "flex", alignItems: "center" }}
             >
-              {showPw ? <EyeOffIcon /> : <EyeIcon />}
+              {showPw ? <EyeIcon /> : <EyeOffIcon />}
             </button>
           </div>
         </div>
