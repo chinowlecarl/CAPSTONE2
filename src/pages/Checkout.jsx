@@ -175,10 +175,10 @@ export default function Checkout({ setPage }) {
           payment_method: payment.toUpperCase(),
         }),
       });
-      const currentOrderId = orderId || data.order?.id;
-      if (!currentOrderId) throw new Error("The order was created but no order ID was returned.");
+      const newOrderId = orderId || data.order?.id;
+      if (!newOrderId) throw new Error("The order was created but no order ID was returned.");
       if (!orderId) {
-        setOrderId(currentOrderId);
+        setOrderId(newOrderId);
         await clearCart();
       }
 
