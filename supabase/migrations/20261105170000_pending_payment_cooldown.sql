@@ -6,21 +6,12 @@ ALTER TABLE public.products
 WITH current_reservations AS (
   SELECT DISTINCT ON (item.product_id)
     item.product_id,
-    CASE
-      WHEN orders.payment_status = 'REJECTED'
-        THEN orders.updated_at + interval '2 minutes'
-      ELSE orders.created_at + interval '2 minutes'
-    END AS expires_at
+    orders.created_at + interval '2 minutes' AS expires_at
   FROM public.order_items AS item
   JOIN public.orders ON orders.id = item.order_id
   WHERE orders.status = 'pending'
-    AND (
-      (
-        orders.payment_status = 'PENDING'
-        AND orders.payment_method IN ('GCASH', 'MAYA')
-      )
-      OR orders.payment_status = 'REJECTED'
-    )
+    AND orders.payment_status = 'PENDING'
+    AND orders.payment_method IN ('GCASH', 'MAYA')
   ORDER BY item.product_id, orders.created_at DESC
 )
 UPDATE public.products AS product
@@ -42,7 +33,8 @@ BEGIN
 
   IF NEW.payment_status = 'REJECTED' THEN
     UPDATE public.products AS product
-    SET reserved_until = now() + interval '2 minutes'
+    SET stock = 1,
+        reserved_until = NULL
     FROM public.order_items AS item
     WHERE item.order_id = NEW.id
       AND item.product_id = product.id
@@ -272,17 +264,26 @@ BEGIN
         (
           order_row.payment_status = 'PENDING'
           AND order_row.payment_method IN ('GCASH', 'MAYA')
+          AND EXISTS (
+            SELECT 1
+            FROM public.order_items AS item
+            JOIN public.products AS product ON product.id = item.product_id
+            WHERE item.order_id = order_row.id
+              AND product.stock = 0
+              AND product.reserved_until IS NOT NULL
+              AND product.reserved_until <= now()
+          )
         )
-        OR order_row.payment_status = 'REJECTED'
-      )
-      AND EXISTS (
-        SELECT 1
-        FROM public.order_items AS item
-        JOIN public.products AS product ON product.id = item.product_id
-        WHERE item.order_id = order_row.id
-          AND product.stock = 0
-          AND product.reserved_until IS NOT NULL
-          AND product.reserved_until <= now()
+        OR (
+          order_row.payment_status = 'REJECTED'
+          AND EXISTS (
+            SELECT 1
+            FROM public.order_items AS item
+            JOIN public.products AS product ON product.id = item.product_id
+            WHERE item.order_id = order_row.id
+              AND product.stock = 0
+          )
+        )
       )
     ORDER BY order_row.created_at
     FOR UPDATE SKIP LOCKED
@@ -295,17 +296,26 @@ BEGIN
         (
           order_row.payment_status = 'PENDING'
           AND order_row.payment_method IN ('GCASH', 'MAYA')
+          AND EXISTS (
+            SELECT 1
+            FROM public.order_items AS item
+            JOIN public.products AS product ON product.id = item.product_id
+            WHERE item.order_id = order_row.id
+              AND product.stock = 0
+              AND product.reserved_until IS NOT NULL
+              AND product.reserved_until <= now()
+          )
         )
-        OR order_row.payment_status = 'REJECTED'
-      )
-      AND EXISTS (
-        SELECT 1
-        FROM public.order_items AS item
-        JOIN public.products AS product ON product.id = item.product_id
-        WHERE item.order_id = order_row.id
-          AND product.stock = 0
-          AND product.reserved_until IS NOT NULL
-          AND product.reserved_until <= now()
+        OR (
+          order_row.payment_status = 'REJECTED'
+          AND EXISTS (
+            SELECT 1
+            FROM public.order_items AS item
+            JOIN public.products AS product ON product.id = item.product_id
+            WHERE item.order_id = order_row.id
+              AND product.stock = 0
+          )
+        )
       )
     RETURNING id INTO expired_order_id;
 
@@ -316,9 +326,7 @@ BEGIN
       FROM public.order_items AS item
       WHERE item.order_id = expired_order_id
         AND item.product_id = product.id
-        AND product.stock = 0
-        AND product.reserved_until IS NOT NULL
-        AND product.reserved_until <= now();
+        AND product.stock = 0;
 
       expired_count := expired_count + 1;
     END IF;

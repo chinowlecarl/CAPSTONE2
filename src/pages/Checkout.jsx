@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { fmt, salePrice, apiFetch } from "../utils/api";
 import { calculateCartTotals } from "../utils/cart.mjs";
@@ -58,8 +58,12 @@ const compressImage = (file) =>
   });
 
 export default function Checkout({ setPage }) {
-  const { user, cart, toast, clearCart } = useApp();
-  const [checkoutCart] = useState(cart);
+  const { user, cart, toast, clearCart, checkoutResume, setCheckoutResume } = useApp();
+  const hasSavedLocation = checkoutResume?.order.delivery_lat != null &&
+    checkoutResume?.order.delivery_lng != null &&
+    Number.isFinite(Number(checkoutResume.order.delivery_lat)) &&
+    Number.isFinite(Number(checkoutResume.order.delivery_lng));
+  const [checkoutCart] = useState(() => checkoutResume?.items || cart);
 
   const getPrice = (item) => {
     const p = item.products || item;
@@ -70,16 +74,12 @@ export default function Checkout({ setPage }) {
 
   const { subtotal, shipping, tax, total } = calculateCartTotals(checkoutCart, getPrice);
 
-  // Restore a pending GCash/Maya order if the page was refreshed
-  const [saved] = useState(readPending);
-
-  const [step, setStep]       = useState(saved ? 2.5 : 1); // 1=details, 2=payment, 2.5=proof (gcash/maya only), 3=success
-  const [payment, setPayment] = useState(saved?.payment || "cod");
+  const [step, setStep]       = useState(checkoutResume && hasSavedLocation ? 2 : 1); // 1=details, 2=payment, 2.5=proof (gcash/maya only), 3=success
+  const [payment, setPayment] = useState(checkoutResume?.order.payment_method?.toLowerCase() || "cod");
   const [loading, setLoading] = useState(false);
-  const [orderId, setOrderId] = useState(saved?.orderId || null);
-  const [orderTotal, setOrderTotal] = useState(saved?.orderTotal ?? null); // saved total, because cart is cleared after placing order
-  const [deliverTo, setDeliverTo]   = useState(saved?.deliverTo || "");
-  const [contactPhone, setContactPhone] = useState(saved?.phone || "");
+  const [orderId, setOrderId] = useState(checkoutResume?.order.id || null);
+  const [resumeShippingAddress] = useState(checkoutResume?.order.shipping_address || "");
+  const [shippingAddressEdited, setShippingAddressEdited] = useState(false);
   const [paymentSubmitted, setPaymentSubmitted] = useState(false);
   const [form, setForm]       = useState({
     username: user?.username || "",
@@ -92,7 +92,16 @@ export default function Checkout({ setPage }) {
     notes:    "",
   });
   const [cardForm, setCardForm] = useState({ number: "", name: "", expiry: "", cvv: "" });
-  const [deliveryLocation, setDeliveryLocation] = useState(null);
+  const [deliveryLocation, setDeliveryLocation] = useState(() => hasSavedLocation
+    ? {
+        lat: Number(checkoutResume.order.delivery_lat),
+        lng: Number(checkoutResume.order.delivery_lng),
+      }
+    : null);
+
+  useEffect(() => {
+    if (checkoutResume) setCheckoutResume(null);
+  }, [checkoutResume, setCheckoutResume]);
 
   // Payment proof state
   const [proofRef, setProofRef]         = useState("");
@@ -104,7 +113,12 @@ export default function Checkout({ setPage }) {
   const proofLockRef = useRef(false);
   const cancelLockRef = useRef(false);
 
-  const sf  = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const sf  = (k) => (e) => {
+    if (["address", "city", "zip", "phone"].includes(k)) {
+      setShippingAddressEdited(true);
+    }
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+  };
   const scf = (k) => (e) => setCardForm((f) => ({ ...f, [k]: e.target.value }));
 
   const inputStyle = {
@@ -127,6 +141,7 @@ export default function Checkout({ setPage }) {
   const handleLocationSelect = (location) => {
     setDeliveryLocation({ lat: location.lat, lng: location.lng });
     if (location.address) {
+      setShippingAddressEdited(true);
       setForm((current) => ({
         ...current,
         address: location.address.street || current.address,
@@ -143,7 +158,9 @@ export default function Checkout({ setPage }) {
     try {
       if (!deliveryLocation) throw new Error("Pin the exact delivery location on the map first.");
       const addressPart = form.address ? `${form.address}, ` : "";
-      const shipping_address = `${addressPart}${form.city} ${form.zip} — Phone: ${form.phone}`;
+      const shipping_address = orderId && !shippingAddressEdited && resumeShippingAddress
+        ? resumeShippingAddress
+        : `${addressPart}${form.city} ${form.zip} — Phone: ${form.phone}`;
       const request = getCheckoutOrderRequest(orderId);
       const data = await apiFetch(request.path, {
         method: request.method,

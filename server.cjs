@@ -596,8 +596,9 @@ app.delete("/api/cart", auth, async (req, res) => {
 
 app.get("/api/orders", auth, async (req, res) => {
   try {
+    await expireUnpaidOrders();
     const { data, error } = await supabase.from("orders")
-      .select("id,created_at,total_amount,status,shipping_address,lalamove_order_id,lalamove_status,lalamove_share_link,delivery_status")
+      .select("id,created_at,total_amount,status,payment_status,payment_method,shipping_address,delivery_lat,delivery_lng,lalamove_order_id,lalamove_status,lalamove_share_link,delivery_status")
       .eq("user_id", req.user.id)
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -711,6 +712,7 @@ app.post("/api/orders", auth, async (req, res) => {
     return res.status(400).json({ error: "Invalid delivery coordinates" });
   }
   try {
+    await expireUnpaidOrders();
     const { data: order, error } = await supabase.rpc("place_single_item_order", {
       p_user_id: req.user.id,
       p_shipping_address: sanitize(shipping_address) || "",

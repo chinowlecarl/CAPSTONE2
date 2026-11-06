@@ -5,6 +5,7 @@ import { supabase } from "../utils/supabase";
 import ChangePassword from "./ChangePassword";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { formatVariantSelection } from "../utils/productVariants.mjs";
+import { canResumePendingOrder } from "../utils/checkout.mjs";
 
 const STATUS_STYLES = {
   pending:   { bg: "#fef9c3", color: "#854d0e", label: "Pending" },
@@ -399,7 +400,7 @@ function SecurityTab({ toast }) {
 }
 
 export default function Profile({ setPage }) {
-  const { user, logout, updateProfile, toast } = useApp();
+  const { user, logout, updateProfile, toast, setCheckoutResume } = useApp();
 
   const [activeTab, setActiveTab] = useState("profile"); // "profile" | "orders"
   const [edit, setEdit]           = useState(false);
@@ -415,6 +416,7 @@ export default function Profile({ setPage }) {
   const [ordersError, setOrdersError]     = useState(null);
   const [ordersRefreshError, setOrdersRefreshError] = useState(null);
   const [cancellingId, setCancellingId]   = useState(null);
+  const [resumingId, setResumingId] = useState(null);
   const [pendingCancel, setPendingCancel] = useState(null);
 
   useEffect(() => {
@@ -473,6 +475,20 @@ export default function Profile({ setPage }) {
   };
 
   const loadOrderItems = (orderId) => apiFetch(`/orders/${orderId}/items`);
+
+  const resumeOrder = async (order) => {
+    setResumingId(order.id);
+    try {
+      const items = await loadOrderItems(order.id);
+      if (!items.length) throw new Error("This order has no items to resume.");
+      setCheckoutResume({ order, items });
+      setPage("checkout");
+    } catch (err) {
+      toast(err.message || "Could not resume this order.", "error");
+    } finally {
+      setResumingId(null);
+    }
+  };
 
   const confirmCancelOrder = async () => {
     if (!pendingCancel) return;
@@ -617,6 +633,26 @@ export default function Profile({ setPage }) {
                     <p style={{ fontSize: 12, color: "#aaa", fontWeight: 600, margin: "0 0 14px", letterSpacing: 0.5 }}>
                   {orders.length} order{orders.length !== 1 ? "s" : ""} found — tap any order to expand
                 </p>
+                {orders.filter(canResumePendingOrder).map((order) => (
+                  <div key={`resume-${order.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", background: "#fff", border: "1px solid #f9a8d4", borderRadius: 14, padding: "16px 18px", marginBottom: 14, boxShadow: "0 2px 10px rgba(190,24,93,0.06)" }}>
+                    <div>
+                      <p style={{ color: "#be185d", fontSize: 10, fontWeight: 800, letterSpacing: 1.2, margin: "0 0 5px" }}>PAYMENT NOT COMPLETED</p>
+                      <p style={{ color: "#333", fontSize: 13, fontWeight: 700, margin: "0 0 4px" }}>
+                        Order #{order.id.slice(0, 8).toUpperCase()} is awaiting payment
+                      </p>
+                      <p style={{ color: "#888", fontSize: 12, margin: 0 }}>
+                        {fmt(order.total_amount)} · Continue checkout without creating another order.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => resumeOrder(order)}
+                      disabled={!!resumingId}
+                      style={{ background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 12, letterSpacing: 0.6, padding: "11px 18px", cursor: resumingId ? "wait" : "pointer", opacity: resumingId && resumingId !== order.id ? 0.6 : 1 }}
+                    >
+                      {resumingId === order.id ? "LOADING..." : "RESUME ORDER"}
+                    </button>
+                  </div>
+                ))}
                 {orders.map((order) => (
                   <OrderCard
                     key={order.id}
