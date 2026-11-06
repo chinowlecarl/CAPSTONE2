@@ -97,6 +97,13 @@ export default function Checkout({ setPage }) {
         lng: Number(checkoutResume.order.delivery_lng),
       }
     : null);
+  const deliverTo = !shippingAddressEdited && resumeShippingAddress
+    ? resumeShippingAddress.split(" — Phone:")[0]
+    : [form.address, `${form.city} ${form.zip}`.trim()].filter(Boolean).join(", ");
+  const contactPhone = !shippingAddressEdited && resumeShippingAddress
+    ? resumeShippingAddress.match(/Phone:\s*(.+)$/)?.[1] || form.phone
+    : form.phone;
+  const orderTotal = total;
 
   useEffect(() => {
     if (checkoutResume) setCheckoutResume(null);
@@ -396,7 +403,7 @@ export default function Checkout({ setPage }) {
             ["Payment", PAYMENT_METHODS.find(p => p.id === payment)?.label],
             ["Deliver to", deliverTo || "—"],
             ["Contact", contactPhone || "—"],
-            ["Total", fmt(orderTotal ?? total)],
+            ["Total", fmt(orderTotal)],
           ].map(([label, val]) => (
             <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8, fontSize: 13 }}>
               <span style={{ color: "#888" }}>{label}</span>
