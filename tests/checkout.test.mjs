@@ -20,11 +20,10 @@ test("the first checkout submission creates one order", () => {
   });
 });
 
-test("GCash and Maya continue to proof while COD and card complete checkout", () => {
+test("GCash and Maya continue to proof while COD completes checkout", () => {
   assert.equal(getPostCheckoutStep("gcash"), 2.5);
   assert.equal(getPostCheckoutStep("maya"), 2.5);
   assert.equal(getPostCheckoutStep("cod"), 3);
-  assert.equal(getPostCheckoutStep("card"), 3);
 });
 
 test("only unpaid pending orders can be resumed", () => {

@@ -10,7 +10,6 @@ const PAYMENT_METHODS = [
   { id: "cod",    label: "Cash on Delivery",  icon: "💵", desc: "Pay when your order arrives" },
   { id: "gcash",  label: "GCash",             icon: "📱", desc: "Pay via GCash mobile wallet" },
   { id: "maya",   label: "Maya",              icon: "💳", desc: "Pay via Maya (PayMaya)" },
-  { id: "card",   label: "Credit / Debit Card", icon: "🏦", desc: "Visa, Mastercard accepted" },
 ];
 
 // TODO: replace with the real business QR code images once provided
@@ -53,7 +52,6 @@ export default function Checkout({ setPage }) {
     zip:      "",
     notes:    "",
   });
-  const [cardForm, setCardForm] = useState({ number: "", name: "", expiry: "", cvv: "" });
   const [deliveryLocation, setDeliveryLocation] = useState(() => hasSavedLocation
     ? {
         lat: Number(checkoutResume.order.delivery_lat),
@@ -81,8 +79,6 @@ export default function Checkout({ setPage }) {
     }
     setForm((f) => ({ ...f, [k]: e.target.value }));
   };
-  const scf = (k) => (e) => setCardForm((f) => ({ ...f, [k]: e.target.value }));
-
   const inputStyle = {
     width: "100%", padding: "10px 14px",
     border: "1.5px solid #fce7f3", borderRadius: 10,
@@ -485,37 +481,6 @@ export default function Checkout({ setPage }) {
                 <p role="status" style={{ color: "#9d174d", background: "#fff5f7", border: "1px solid #fce7f3", borderRadius: 10, padding: 12, margin: "0 0 20px", fontSize: 13 }}>
                   Order #{orderId.slice(0, 8).toUpperCase()} is still awaiting payment. You can change the payment method without creating another order.
                 </p>
-              )}
-
-              {/* Card form */}
-              {payment === "card" && (
-                <div style={{ background: "#fff5f7", borderRadius: 12, padding: 20, border: "1px solid #fce7f3", marginBottom: 20 }}>
-                  <p style={{ fontSize: 10, fontWeight: 800, color: "#be185d", letterSpacing: 1.5, margin: "0 0 16px" }}>CARD DETAILS</p>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    <div>
-                      <label style={labelStyle}>Card Number</label>
-                      <input value={cardForm.number} onChange={scf("number")} placeholder="1234 5678 9012 3456" maxLength={19}
-                        style={inputStyle} onFocus={(e)=>(e.target.style.borderColor="#db2777")} onBlur={(e)=>(e.target.style.borderColor="#fce7f3")} />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Name on Card</label>
-                      <input value={cardForm.name} onChange={scf("name")} placeholder="JUAN DELA CRUZ"
-                        style={inputStyle} onFocus={(e)=>(e.target.style.borderColor="#db2777")} onBlur={(e)=>(e.target.style.borderColor="#fce7f3")} />
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                      <div>
-                        <label style={labelStyle}>Expiry Date</label>
-                        <input value={cardForm.expiry} onChange={scf("expiry")} placeholder="MM/YY" maxLength={5}
-                          style={inputStyle} onFocus={(e)=>(e.target.style.borderColor="#db2777")} onBlur={(e)=>(e.target.style.borderColor="#fce7f3")} />
-                      </div>
-                      <div>
-                        <label style={labelStyle}>CVV</label>
-                        <input value={cardForm.cvv} onChange={scf("cvv")} placeholder="123" maxLength={4} type="password"
-                          style={inputStyle} onFocus={(e)=>(e.target.style.borderColor="#db2777")} onBlur={(e)=>(e.target.style.borderColor="#fce7f3")} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
               )}
 
               {/* GCash / Maya — QR shown after order is placed, not here */}

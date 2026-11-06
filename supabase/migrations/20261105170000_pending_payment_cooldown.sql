@@ -90,7 +90,7 @@ DECLARE
   v_unit_price numeric;
   v_reservation_until timestamptz;
 BEGIN
-  IF p_payment_method NOT IN ('COD', 'GCASH', 'MAYA', 'CARD') THEN
+  IF p_payment_method NOT IN ('COD', 'GCASH', 'MAYA') THEN
     RAISE EXCEPTION 'Select a valid payment method'
       USING ERRCODE = 'P3002';
   END IF;
