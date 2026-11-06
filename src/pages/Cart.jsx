@@ -1,10 +1,48 @@
+import { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { fmt, salePrice } from "../utils/api";
+import { apiFetch, fmt, salePrice } from "../utils/api";
 import { calculateCartTotals } from "../utils/cart.mjs";
 import { formatVariantSelection } from "../utils/productVariants.mjs";
+import { canResumePendingOrder } from "../utils/checkout.mjs";
 
 export default function Cart({ setPage }) {
-  const { cart, removeFromCart, user } = useApp();
+  const { cart, removeFromCart, user, toast, setCheckoutResume } = useApp();
+  const [pendingOrders, setPendingOrders] = useState([]);
+  const [ordersError, setOrdersError] = useState("");
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [resumingId, setResumingId] = useState(null);
+
+  const loadPendingOrders = async () => {
+    if (!user) return;
+    setOrdersLoading(true);
+    setOrdersError("");
+    try {
+      const orders = await apiFetch("/orders");
+      setPendingOrders(orders.filter(canResumePendingOrder));
+    } catch (error) {
+      setOrdersError(error.message || "Could not load pending orders.");
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPendingOrders();
+  }, [user?.id]);
+
+  const resumeOrder = async (order) => {
+    setResumingId(order.id);
+    try {
+      const items = await apiFetch(`/orders/${order.id}/items`);
+      if (!items.length) throw new Error("This order has no items to resume.");
+      setCheckoutResume({ order, items });
+      setPage("checkout");
+    } catch (error) {
+      toast(error.message || "Could not resume this order.", "error");
+    } finally {
+      setResumingId(null);
+    }
+  };
 
   const getPrice = (item) => {
     const p = item.products || item;
@@ -27,6 +65,34 @@ export default function Cart({ setPage }) {
 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px", display: "grid", gridTemplateColumns: cart.length > 0 ? "1fr 340px" : "1fr", gap: 24 }}>
         <div>
+          {ordersError && (
+            <div role="alert" style={{ background: "#fff", border: "1px solid #fecaca", borderRadius: 12, padding: 14, marginBottom: 16, color: "#b91c1c", fontSize: 13 }}>
+              Could not check for pending orders: {ordersError}
+              <button onClick={loadPendingOrders} disabled={ordersLoading} style={{ marginLeft: 10, border: 0, background: "none", color: "#be185d", fontWeight: 700, cursor: "pointer" }}>
+                {ordersLoading ? "Retrying..." : "Retry"}
+              </button>
+            </div>
+          )}
+          {pendingOrders.map((order) => (
+            <div key={order.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", background: "#fff", border: "1px solid #f9a8d4", borderRadius: 14, padding: "16px 18px", marginBottom: 16, boxShadow: "0 2px 10px rgba(190,24,93,0.06)" }}>
+              <div>
+                <p style={{ color: "#be185d", fontSize: 10, fontWeight: 800, letterSpacing: 1.2, margin: "0 0 5px" }}>PAYMENT NOT COMPLETED</p>
+                <p style={{ color: "#333", fontSize: 13, fontWeight: 700, margin: "0 0 4px" }}>
+                  Order #{order.id.slice(0, 8).toUpperCase()} is awaiting payment
+                </p>
+                <p style={{ color: "#888", fontSize: 12, margin: 0 }}>
+                  {fmt(order.total_amount)} · Resume without creating another order.
+                </p>
+              </div>
+              <button
+                onClick={() => resumeOrder(order)}
+                disabled={!!resumingId}
+                style={{ background: "linear-gradient(135deg,#f9a8d4,#be185d)", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 12, letterSpacing: 0.6, padding: "11px 18px", cursor: resumingId ? "wait" : "pointer", opacity: resumingId && resumingId !== order.id ? 0.6 : 1 }}
+              >
+                {resumingId === order.id ? "LOADING..." : "RESUME ORDER"}
+              </button>
+            </div>
+          ))}
           {cart.length === 0 ? (
             <div style={{ background: "#fff", borderRadius: 16, padding: "60px 24px", textAlign: "center", border: "1px solid #fce7f3" }}>
               <div style={{ fontSize: 56, marginBottom: 16 }}>🛍</div>

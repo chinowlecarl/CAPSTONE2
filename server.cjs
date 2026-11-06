@@ -596,7 +596,6 @@ app.delete("/api/cart", auth, async (req, res) => {
 
 app.get("/api/orders", auth, async (req, res) => {
   try {
-    await expireUnpaidOrders();
     const { data, error } = await supabase.from("orders")
       .select("id,created_at,total_amount,status,payment_status,payment_method,shipping_address,delivery_lat,delivery_lng,lalamove_order_id,lalamove_status,lalamove_share_link,delivery_status")
       .eq("user_id", req.user.id)
@@ -730,7 +729,12 @@ app.post("/api/orders", auth, async (req, res) => {
     console.log(`[ORDER] ${new Date().toISOString()} - Order placed by user: ${req.user.id}`);
     res.status(201).json({ message: "Order placed!", order });
   } catch (err) {
-    console.error(`[ORDER ERROR] ${err.message}`);
+    console.error("[ORDER ERROR]", JSON.stringify({
+      message: err.message,
+      code: err.code,
+      details: err.details,
+      hint: err.hint,
+    }));
     res.status(500).json({ error: "Failed to place order" });
   }
 });
