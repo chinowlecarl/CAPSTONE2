@@ -670,6 +670,7 @@ app.put("/api/orders/:id/checkout", auth, async (req, res) => {
         delivery_lat: latitude,
         delivery_lng: longitude,
         payment_method,
+        ...(payment_method === "COD" ? { status: "confirmed" } : {}),
       })
       .eq("id", currentOrder.id)
       .eq("user_id", req.user.id)

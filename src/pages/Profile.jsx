@@ -127,6 +127,12 @@ function OrderCard({ order, onCancel, cancelling, loadItems }) {
             <p style={{ fontSize: 13, color: "#555", margin: 0 }}>{order.shipping_address || "—"}</p>
           </div>
 
+          {order.payment_method === "COD" && (
+            <p style={{ fontSize: 12, color: "#555", margin: "0 0 14px" }}>
+              Cash on delivery — payment is due when your order arrives.
+            </p>
+          )}
+
           {/* Items list */}
           <p style={{ fontSize: 10, fontWeight: 800, color: "#be185d", letterSpacing: 1.5, margin: "0 0 10px" }}>
             ITEMS ORDERED
