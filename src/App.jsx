@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { Suspense, useState } from "react";
 import "./App.css";
 import "./UIConsistency.css";
  
@@ -6,18 +6,19 @@ import { AppProvider } from "./context/AppContext";
 import { Main } from "./components/Main";
 import { ConfirmHost } from "./components/ConfirmDialog";
 import { AdminRoute } from "./components/AdminRoute";
+import { lazyWithRecovery } from "./utils/lazyWithRecovery.mjs";
  
 import Home from "./pages/Home";
-const Products = lazy(() => import("./pages/Products"));
-const Cart = lazy(() => import("./pages/Cart"));
-const About = lazy(() => import("./pages/About"));
-const SignIn = lazy(() => import("./pages/SignIn"));
-const Register = lazy(() => import("./pages/Register"));
-const Profile = lazy(() => import("./pages/Profile"));
-const Checkout = lazy(() => import("./pages/Checkout"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Products = lazyWithRecovery(() => import("./pages/Products"));
+const Cart = lazyWithRecovery(() => import("./pages/Cart"));
+const About = lazyWithRecovery(() => import("./pages/About"));
+const SignIn = lazyWithRecovery(() => import("./pages/SignIn"));
+const Register = lazyWithRecovery(() => import("./pages/Register"));
+const Profile = lazyWithRecovery(() => import("./pages/Profile"));
+const Checkout = lazyWithRecovery(() => import("./pages/Checkout"));
+const ResetPassword = lazyWithRecovery(() => import("./pages/ResetPassword"));
 
-const AdminHome = lazy(() => import("./pages/admin/AdminHome"));
+const AdminHome = lazyWithRecovery(() => import("./pages/admin/AdminHome"));
  
 export default function App() {
   const [page, setPage] = useState(() => {
