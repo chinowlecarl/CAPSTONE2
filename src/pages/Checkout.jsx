@@ -64,7 +64,7 @@ export default function Checkout({ setPage }) {
   const contactPhone = !shippingAddressEdited && resumeShippingAddress
     ? resumeShippingAddress.match(/Phone:\s*(.+)$/)?.[1] || form.phone
     : form.phone;
-  const orderTotal = total;
+  const finalTotal = total;
 
   useEffect(() => {
     if (checkoutResume) setCheckoutResume(null);
@@ -278,7 +278,7 @@ export default function Checkout({ setPage }) {
 
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <p style={{ fontSize: 12, color: "#888", margin: "0 0 4px" }}>Amount to pay</p>
-          <p style={{ fontSize: 26, fontWeight: 900, color: "#be185d", margin: 0 }}>{fmt(total)}</p>
+          <p style={{ fontSize: 26, fontWeight: 900, color: "#be185d", margin: 0 }}>{fmt(finalTotal)}</p>
         </div>
 
         <div style={{ marginBottom: 16 }}>
@@ -357,7 +357,7 @@ export default function Checkout({ setPage }) {
             ["Payment", PAYMENT_METHODS.find(p => p.id === payment)?.label],
             ["Deliver to", deliverTo || "—"],
             ["Contact", contactPhone || "—"],
-            ["Total", fmt(orderTotal)],
+            ["Total", fmt(finalTotal)],
           ].map(([label, val]) => (
             <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
               <span style={{ color: "#888" }}>{label}</span>
