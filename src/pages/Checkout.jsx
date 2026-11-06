@@ -389,6 +389,8 @@ export default function Checkout({ setPage }) {
         <p style={{ color: "#be185d", fontWeight: 600, fontSize: 14, margin: "0 0 24px" }}>
           {paymentSubmitted
             ? "We're verifying your payment — you'll be notified once it's confirmed."
+            : payment === "cod"
+              ? "Your COD order is confirmed. Please have payment ready when the rider arrives."
             : "Thank you for shopping with FITCHEQUE 🌸"}
         </p>
         {orderId && (
