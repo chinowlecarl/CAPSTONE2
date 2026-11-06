@@ -21,6 +21,7 @@ export function AppProvider({ children, onRequireLogin }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [passwordRecoveryReady, setPasswordRecoveryReady] = useState(false);
   const [cart, setCart] = useState([]);
+  const [checkoutResume, setCheckoutResume] = useState(null);
   const [addingProducts, setAddingProducts] = useState({});
   const cartRef = useRef(cart);
   const cartRevisionRef = useRef(0);
@@ -537,6 +538,7 @@ export function AppProvider({ children, onRequireLogin }) {
 
     const ctx = {
     user, authLoading, cart, toasts, passwordRecoveryReady,
+    checkoutResume, setCheckoutResume,
     login, logout, registerUser, completeLogin, completeRegister, updateProfile,
     requestPasswordReset, completePasswordReset,
     verifyTotpChallenge, verifyEmailOtpChallenge, resendEmailOtpChallenge, cancelChallenge,
