@@ -29,7 +29,6 @@ export default function Cart({ setPage }) {
         <div>
           {cart.length === 0 ? (
             <div style={{ background: "#fff", borderRadius: 16, padding: "60px 24px", textAlign: "center", border: "1px solid #fce7f3" }}>
-              <div style={{ fontSize: 56, marginBottom: 16 }}>🛍</div>
               <h3 style={{ fontFamily: "'Playfair Display', serif", color: "#be185d", marginBottom: 8 }}>Your cart is empty</h3>
               <p style={{ color: "#aaa", marginBottom: 24 }}>Start adding some beautiful pieces!</p>
               <button onClick={() => setPage("products")} style={{ background: "linear-gradient(135deg, #f9a8d4, #be185d)", color: "#fff", border: "none", borderRadius: 24, padding: "12px 32px", fontWeight: 700, fontSize: 13, cursor: "pointer", letterSpacing: 1 }}>BROWSE PRODUCTS</button>
@@ -52,7 +51,7 @@ export default function Cart({ setPage }) {
                       )}
                       {soldOut && (
                         <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: "#ef4444" }}>
-                          ⚠ No longer available — please remove
+                          No longer available — please remove
                         </div>
                       )}
                     </div>
@@ -83,7 +82,7 @@ export default function Cart({ setPage }) {
             </div>
             {hasUnavailableItem && (
               <div style={{ marginTop: 14, fontSize: 12, fontWeight: 700, color: "#ef4444", background: "#fff5f5", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px" }}>
-                ⚠ Remove unavailable items to continue
+                Remove unavailable items to continue
               </div>
             )}
             <button
