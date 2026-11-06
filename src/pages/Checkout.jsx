@@ -5,6 +5,8 @@ import { calculateCartTotals } from "../utils/cart.mjs";
 import { getCheckoutOrderRequest, getPostCheckoutStep } from "../utils/checkout.mjs";
 import { formatVariantSelection } from "../utils/productVariants.mjs";
 import DeliveryLocationPicker from "../components/DeliveryLocationPicker";
+import gcashQr from "../assets/payment/gcash-qr.jpg";
+import mayaQr from "../assets/payment/maya-qr.jpg";
 
 const PAYMENT_METHODS = [
   { id: "cod",    label: "Cash on Delivery",  icon: "💵", desc: "Pay when your order arrives" },
@@ -12,10 +14,9 @@ const PAYMENT_METHODS = [
   { id: "maya",   label: "Maya",              icon: "💳", desc: "Pay via Maya (PayMaya)" },
 ];
 
-// TODO: replace with the real business QR code images once provided
 const QR_IMAGES = {
-  gcash: "https://placehold.co/280x280/00A1E4/ffffff?text=GCash+QR",
-  maya:  "https://placehold.co/280x280/5CC638/ffffff?text=Maya+QR",
+  gcash: gcashQr,
+  maya: mayaQr,
 };
 
 export default function Checkout({ setPage }) {
