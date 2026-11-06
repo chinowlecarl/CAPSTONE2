@@ -58,7 +58,7 @@ export default function Checkout({ setPage }) {
         lng: Number(checkoutResume.order.delivery_lng),
       }
     : null);
-  const deliverTo = !shippingAddressEdited && resumeShippingAddress
+  const deliveryText = !shippingAddressEdited && resumeShippingAddress
     ? resumeShippingAddress.split(" — Phone:")[0]
     : [form.address, `${form.city} ${form.zip}`.trim()].filter(Boolean).join(", ");
   const contactPhone = !shippingAddressEdited && resumeShippingAddress
@@ -355,7 +355,7 @@ export default function Checkout({ setPage }) {
           <p style={{ color: "#aaa", fontSize: 10, fontWeight: 800, letterSpacing: 1.5, margin: "0 0 10px" }}>ORDER DETAILS</p>
           {[
             ["Payment", PAYMENT_METHODS.find(p => p.id === payment)?.label],
-            ["Deliver to", deliverTo || "—"],
+            ["Deliver to", deliveryText || "—"],
             ["Contact", contactPhone || "—"],
             ["Total", fmt(finalTotal)],
           ].map(([label, val]) => (
