@@ -643,6 +643,27 @@ app.put("/api/orders/:id/checkout", auth, async (req, res) => {
 
   try {
     await expireUnpaidOrders();
+
+    const { data: currentOrder, error: orderError } = await supabase.from("orders")
+      .select("id, user_id, status, payment_status")
+      .eq("id", req.params.id)
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+
+    if (orderError) throw orderError;
+    if (!currentOrder) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    const isAwaitingPayment = currentOrder.status === "pending" &&
+      (currentOrder.payment_status == null || ["PENDING", "REJECTED"].includes(currentOrder.payment_status));
+
+    if (!isAwaitingPayment) {
+      return res.status(409).json({
+        error: "This order is no longer awaiting payment and cannot be changed.",
+      });
+    }
+
     const { data: order, error } = await supabase.from("orders")
       .update({
         shipping_address: sanitize(shipping_address) || "",
@@ -650,18 +671,19 @@ app.put("/api/orders/:id/checkout", auth, async (req, res) => {
         delivery_lng: longitude,
         payment_method,
       })
-      .eq("id", req.params.id)
+      .eq("id", currentOrder.id)
       .eq("user_id", req.user.id)
       .eq("status", "pending")
-      .eq("payment_status", "PENDING")
       .select()
       .maybeSingle();
+
     if (error) throw error;
     if (!order) {
       return res.status(409).json({
         error: "This order is no longer awaiting payment and cannot be changed.",
       });
     }
+
     res.json({ message: "Checkout details updated!", order });
   } catch (err) {
     console.error(`[ORDER CHECKOUT UPDATE ERROR] ${err.message}`);
