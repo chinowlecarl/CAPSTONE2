@@ -1,15 +1,16 @@
-import { lazy, Suspense, useState } from "react";
+import { Suspense, useState } from "react";
+import { lazyWithRecovery } from "../../utils/lazyWithRecovery.mjs";
 import { useApp } from "../../context/AppContext";
 
-const ManageProducts = lazy(() => import("./ManageProducts"));
-const ManageEvents = lazy(() => import("./ManageEvents"));
-const PaymentVerification = lazy(() => import("./PaymentVerification"));
-const CheckInDesk = lazy(() => import("./CheckInDesk"));
-const EventDetails = lazy(() => import("./EventDetails"));
-const SalesInsights = lazy(() => import("./SalesInsights"));
-const CustomerBehavior = lazy(() => import("./CustomerBehavior"));
-const ActivityLog = lazy(() => import("./ActivityLog"));
-const ArchivedProducts = lazy(() => import("./ArchivedProducts"));
+const ManageProducts = lazyWithRecovery(() => import("./ManageProducts"));
+const ManageEvents = lazyWithRecovery(() => import("./ManageEvents"));
+const PaymentVerification = lazyWithRecovery(() => import("./PaymentVerification"));
+const CheckInDesk = lazyWithRecovery(() => import("./CheckInDesk"));
+const EventDetails = lazyWithRecovery(() => import("./EventDetails"));
+const SalesInsights = lazyWithRecovery(() => import("./SalesInsights"));
+const CustomerBehavior = lazyWithRecovery(() => import("./CustomerBehavior"));
+const ActivityLog = lazyWithRecovery(() => import("./ActivityLog"));
+const ArchivedProducts = lazyWithRecovery(() => import("./ArchivedProducts"));
 
 const TABS = [
   { id: "products", label: "📦 Products",     icon: "📦" },
