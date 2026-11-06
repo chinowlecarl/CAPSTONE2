@@ -181,7 +181,7 @@ DECLARE
   v_total numeric := 0;
   v_unit_price numeric;
 BEGIN
-  IF p_payment_method NOT IN ('COD', 'GCASH', 'MAYA', 'CARD') THEN
+  IF p_payment_method NOT IN ('COD', 'GCASH', 'MAYA') THEN
     RAISE EXCEPTION 'Select a valid payment method'
       USING ERRCODE = 'P3002';
   END IF;

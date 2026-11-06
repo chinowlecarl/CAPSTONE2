@@ -628,7 +628,7 @@ app.get("/api/orders/:id/items", auth, async (req, res) => {
 
 app.put("/api/orders/:id/checkout", auth, async (req, res) => {
   const { shipping_address, delivery_lat, delivery_lng, payment_method } = req.body;
-  const methods = ["COD", "GCASH", "MAYA", "CARD"];
+  const methods = ["COD", "GCASH", "MAYA"];
   if (!methods.includes(payment_method)) {
     return res.status(400).json({ error: "Select a valid payment method" });
   }
@@ -693,7 +693,7 @@ app.put("/api/orders/:id/checkout", auth, async (req, res) => {
 
 app.post("/api/orders", auth, async (req, res) => {
   const { shipping_address, delivery_lat, delivery_lng, payment_method } = req.body;
-  const methods = ["COD", "GCASH", "MAYA", "CARD"];
+  const methods = ["COD", "GCASH", "MAYA"];
   if (!methods.includes(payment_method)) {
     return res.status(400).json({ error: "Select a valid payment method" });
   }
