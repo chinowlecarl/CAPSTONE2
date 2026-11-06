@@ -17,13 +17,12 @@ export default function About() {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, margin: "40px 0" }}>
           {[
-            ["🎯", "Our Mission", "To provide high-quality thrift fashion at affordable prices while delivering exceptional customer service and supporting sustainable practices."],
-            ["👁", "Our Vision", "To become the Philippines' most trusted thrift fashion brand, where everyone can find their perfect style."],
-            ["💚", "Sustainability", "Every purchase supports sustainable fashion. We believe in giving clothes a second life and reducing fashion waste."],
-            ["🤝", "Community", "FITCHEQUE is more than a store — it's a community of fashion lovers who believe style shouldn't cost the earth."],
-          ].map(([icon, title, desc]) => (
+            ["Our Mission", "To provide high-quality thrift fashion at affordable prices while delivering exceptional customer service and supporting sustainable practices."],
+            ["Our Vision", "To become the Philippines' most trusted thrift fashion brand, where everyone can find their perfect style."],
+            ["Sustainability", "Every purchase supports sustainable fashion. We believe in giving clothes a second life and reducing fashion waste."],
+            ["Community", "FITCHEQUE is more than a store — it's a community of fashion lovers who believe style shouldn't cost the earth."],
+          ].map(([title, desc]) => (
             <div key={title} style={{ background: "linear-gradient(135deg, #fff5f7, #fce7f3)", borderRadius: 16, padding: 28, border: "1px solid #fce7f3", textAlign: "center" }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>{icon}</div>
               <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, color: "#1a1a1a", marginBottom: 10 }}>{title}</h3>
               <p style={{ color: "#777", fontSize: 13, lineHeight: 1.7, margin: 0 }}>{desc}</p>
             </div>

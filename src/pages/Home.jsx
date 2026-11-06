@@ -84,13 +84,12 @@ export default function Home({ setPage }) {
       <section className="home-features" style={{ background: "#be185d", padding: "20px 0" }}>
         <div className="home-features-grid" style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, textAlign: "center" }}>
           {[
-            ["🚚", "FREE SHIPPING", "Orders over ₱500"],
-            ["↩", "30-DAY RETURNS", "Easy return policy"],
-            ["🔒", "SECURE PAYMENT", "100% protected"],
-            ["💬", "24/7 SUPPORT", "Always here for you"],
-          ].map(([icon, title, sub]) => (
+            ["FREE SHIPPING", "Orders over ₱500"],
+            ["30-DAY RETURNS", "Easy return policy"],
+            ["SECURE PAYMENT", "100% protected"],
+            ["24/7 SUPPORT", "Always here for you"],
+          ].map(([title, sub]) => (
             <div key={title}>
-              <div style={{ fontSize: 22, marginBottom: 4 }}>{icon}</div>
               <div style={{ color: "#fff", fontSize: 11, fontWeight: 800, letterSpacing: 1 }}>{title}</div>
               <div style={{ color: "#fce7f3", fontSize: 10, marginTop: 2 }}>{sub}</div>
             </div>

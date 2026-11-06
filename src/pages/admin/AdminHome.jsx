@@ -20,10 +20,9 @@ const TABS = [
   { id: "payments", label: "💳 Payments",      icon: "💳" },
   { id: "orders",   label: "🛍 Orders",       icon: "🛍" },
   { id: "users",    label: "👥 Users",         icon: "👥" },
-  { id: "activity", label: "🕒 Activity Log",  icon: "🕒" },
-  { id: "checkin",  label: "🔍 Check-In",     icon: "🔍" },
+  { id: "activity", label: "🕐 Activity Log",  icon: "🕐" },
+  { id: "checkin",  label: "🔍 User Transaction", icon: "🔍" },
 ];
-
 export default function AdminHome({ setPage }) {
   const { user, logout } = useApp();
   const [tab, setTab] = useState("products");
