@@ -19,6 +19,45 @@ const QR_IMAGES = {
   maya: mayaQr,
 };
 
+const PENDING_KEY = "fitcheque_pending_proof";
+
+// Read the pending-payment session (so a page refresh doesn't lose the order)
+const readPending = () => {
+  try {
+    return JSON.parse(sessionStorage.getItem(PENDING_KEY) || "null");
+  } catch {
+    return null;
+  }
+};
+const savePending = (data) => {
+  try { sessionStorage.setItem(PENDING_KEY, JSON.stringify(data)); } catch {}
+};
+const clearPending = () => {
+  try { sessionStorage.removeItem(PENDING_KEY); } catch {}
+};
+
+// Resize + compress the screenshot so the request body stays small
+const compressImage = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const MAX = 1200;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.8));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
 export default function Checkout({ setPage }) {
   const { user, cart, toast, clearCart, checkoutResume, setCheckoutResume } = useApp();
   const hasSavedLocation = checkoutResume?.order.delivery_lat != null &&
@@ -146,6 +185,13 @@ export default function Checkout({ setPage }) {
 
       if (getPostCheckoutStep(payment) === 2.5) {
         // Order exists as PENDING payment — now show QR + collect proof
+        savePending({
+          orderId: newOrderId,
+          orderTotal: finalTotal,
+          payment,
+          deliverTo: deliveryText,
+          phone: form.phone,
+        });
         setStep(2.5);
         toast(orderId ? "Payment method updated. Please complete your payment." : "Order created! Please complete your payment.", "success");
       } else {
@@ -160,7 +206,7 @@ export default function Checkout({ setPage }) {
     }
   };
 
-  const handleProofFile = (e) => {
+  const handleProofFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -171,12 +217,13 @@ export default function Checkout({ setPage }) {
       toast("Image must be under 8MB", "error");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setProofImage(reader.result);
-      setProofPreview(reader.result);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImage(file);
+      setProofImage(compressed);
+      setProofPreview(compressed);
+    } catch {
+      toast("Could not read that image. Please try another one.", "error");
+    }
   };
 
   const submitPaymentProof = async () => {
@@ -194,6 +241,7 @@ export default function Checkout({ setPage }) {
           proof_base64: proofImage,
         }),
       });
+      clearPending();
       setPaymentSubmitted(true);
       setStep(3);
       toast("Payment proof submitted! Waiting for admin verification.", "success");
@@ -269,7 +317,7 @@ export default function Checkout({ setPage }) {
         {orderId && (
           <div style={{ background: "#fff5f7", borderRadius: 10, padding: "8px 14px", marginBottom: 20, textAlign: "center", border: "1px solid #fce7f3" }}>
             <span style={{ fontSize: 10, color: "#aaa", fontWeight: 800, letterSpacing: 1 }}>ORDER ID: </span>
-            <span style={{ fontFamily: "monospace", color: "#be185d", fontWeight: 700, fontSize: 12 }}>#{orderId.slice(0,8).toUpperCase()}</span>
+            <span style={{ fontFamily: "monospace", color: "#be185d", fontWeight: 700, fontSize: 12 }}>#{String(orderId).slice(0,8).toUpperCase()}</span>
           </div>
         )}
 
@@ -349,7 +397,7 @@ export default function Checkout({ setPage }) {
         {orderId && (
           <div style={{ background: "#fff5f7", borderRadius: 12, padding: "12px 20px", marginBottom: 24, border: "1px solid #fce7f3" }}>
             <p style={{ color: "#aaa", fontSize: 10, fontWeight: 800, letterSpacing: 1.5, margin: "0 0 4px" }}>ORDER ID</p>
-            <p style={{ fontFamily: "monospace", color: "#be185d", fontWeight: 700, fontSize: 13, margin: 0 }}>#{orderId.slice(0,8).toUpperCase()}</p>
+            <p style={{ fontFamily: "monospace", color: "#be185d", fontWeight: 700, fontSize: 13, margin: 0 }}>#{String(orderId).slice(0,8).toUpperCase()}</p>
           </div>
         )}
         <div style={{ background: "#fff5f7", borderRadius: 12, padding: "16px 20px", marginBottom: 28, border: "1px solid #fce7f3", textAlign: "left" }}>
@@ -360,9 +408,9 @@ export default function Checkout({ setPage }) {
             ["Contact", contactPhone || "—"],
             ["Total", fmt(finalTotal)],
           ].map(([label, val]) => (
-            <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
+            <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8, fontSize: 13 }}>
               <span style={{ color: "#888" }}>{label}</span>
-              <span style={{ fontWeight: 700, color: "#1a1a1a" }}>{val}</span>
+              <span style={{ fontWeight: 700, color: "#1a1a1a", textAlign: "right" }}>{val}</span>
             </div>
           ))}
         </div>
